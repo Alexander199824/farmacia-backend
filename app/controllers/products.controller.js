@@ -13,10 +13,23 @@ exports.create = async (req, res) => {
     }
 };
 
-// Obtener todos los productos
+// Obtener todos los productos con filtro opcional de búsqueda
 exports.getAll = async (req, res) => {
     try {
-        const products = await Product.findAll();
+        const { search } = req.query;
+        let products;
+
+        if (search) {
+            // Filtra los productos cuyo nombre contenga el término de búsqueda, ignorando mayúsculas/minúsculas
+            products = await Product.findAll({
+                where: {
+                    name: { [db.Sequelize.Op.iLike]: `%${search}%` }
+                }
+            });
+        } else {
+            products = await Product.findAll();
+        }
+
         res.json(products);
     } catch (error) {
         res.status(500).json({ message: "Error al obtener los productos", error: error.message });
