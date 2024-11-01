@@ -1,6 +1,7 @@
 // controllers/payment.controller.js
+const env = require('../config/env'); // Asegúrate de que la ruta sea correcta
 const Stripe = require('stripe');
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe = Stripe(env.stripeSecretKey); // Utiliza la clave desde el archivo de configuración
 
 exports.createPaymentIntent = async (req, res) => {
     const { amount } = req.body;
