@@ -37,6 +37,7 @@ db.Worker = require('../models/worker.js')(sequelize, Sequelize); // Modelo de T
 db.Client = require('../models/client.js')(sequelize, Sequelize); // Modelo de Clientes
 db.Invoice = require('../models/invoice.js')(sequelize, Sequelize); // Modelo de Facturas
 db.InvoiceItem = require('../models/invoiceItem.js')(sequelize, Sequelize); // Modelo de Items de Facturas
+db.Payment = require('../models/payment.js')(sequelize, Sequelize);
 
 // Define relaciones entre los modelos
 db.Invoice.hasMany(db.InvoiceItem, { as: 'items' });
