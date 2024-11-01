@@ -8,11 +8,24 @@ const bcrypt = require('bcrypt');
 exports.register = async (req, res) => {
     try {
         const { username, password, role, userType, dpi } = req.body;
-        const image = req.file ? req.file.buffer : null; // Almacena la imagen si está presente
+        const image = req.file ? req.file.buffer : null;
+
+        // Verifica si el DPI o nombre de usuario ya existe en la tabla de usuarios
+        const existingUser = await User.findOne({ where: { dpi } });
+        if (existingUser) {
+            return res.status(400).json({ message: "DPI ya registrado para otro usuario." });
+        }
+
+        const existingUsername = await User.findOne({ where: { username } });
+        if (existingUsername) {
+            return res.status(400).json({ message: "Nombre de usuario ya en uso." });
+        }
+
+        // Crea el usuario si pasa las verificaciones
         const user = await User.create({ username, password, role, userType, dpi, image });
         res.status(201).json({ message: "Usuario registrado exitosamente", user });
     } catch (error) {
-        console.log("Error en el registro:", error);
+        console.error("Error en el registro:", error);
         res.status(500).json({ message: "Error en el registro", error: error.message });
     }
 };
@@ -48,8 +61,11 @@ exports.getAllUsers = async (req, res) => {
 exports.getUserById = async (req, res) => {
     try {
         const user = await User.findByPk(req.params.id);
-        if (user) res.status(200).json(user);
-        else res.status(404).json({ message: "Usuario no encontrado" });
+        if (user) {
+            res.status(200).json(user);
+        } else {
+            res.status(404).json({ message: "Usuario no encontrado" });
+        }
     } catch (error) {
         res.status(500).json({ message: "Error al obtener usuario", error: error.message });
     }
@@ -59,9 +75,11 @@ exports.getUserById = async (req, res) => {
 exports.updateUser = async (req, res) => {
     try {
         const { username, password, role, userType, dpi } = req.body;
-        const image = req.file ? req.file.buffer : undefined; // Solo actualizar imagen si se envía
+        const image = req.file ? req.file.buffer : undefined;
         const user = await User.findByPk(req.params.id);
+        
         if (user) {
+            // Actualiza solo los campos proporcionados
             user.username = username || user.username;
             user.password = password ? await bcrypt.hash(password, 12) : user.password;
             user.role = role || user.role;
@@ -69,6 +87,7 @@ exports.updateUser = async (req, res) => {
             user.dpi = dpi || user.dpi;
             if (image !== undefined) user.image = image;
             await user.save();
+
             res.status(200).json({ message: "Usuario actualizado exitosamente", user });
         } else {
             res.status(404).json({ message: "Usuario no encontrado" });
