@@ -1,30 +1,18 @@
 // controllers/payment.controller.js
-const paypal = require('paypal-rest-sdk');
+const Stripe = require('stripe');
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
-paypal.configure({
-    mode: 'sandbox',
-    client_id: process.env.PAYPAL_CLIENT_ID,
-    client_secret: process.env.PAYPAL_CLIENT_SECRET
-});
+exports.createPaymentIntent = async (req, res) => {
+    const { amount } = req.body;
 
-exports.createPayment = (req, res) => {
-    const { price } = req.body;
-
-    const paymentJson = {
-        intent: 'sale',
-        payer: { payment_method: 'paypal' },
-        transactions: [{ amount: { total: price, currency: 'USD' }, description: 'Compra en Mi Farmacia Online' }],
-        redirect_urls: {
-            return_url: "http://localhost:5000/api/payments/success",
-            cancel_url: "http://localhost:5000/api/payments/cancel"
-        }
-    };
-
-    paypal.payment.create(paymentJson, (error, payment) => {
-        if (error) {
-            res.status(500).json({ message: "Error en el pago", error: error.message });
-        } else {
-            res.json({ link: payment.links.find(link => link.rel === 'approval_url').href });
-        }
-    });
+    try {
+        const paymentIntent = await stripe.paymentIntents.create({
+            amount,
+            currency: 'usd',
+            // Puedes agregar más parámetros como "payment_method_types"
+        });
+        res.send({ clientSecret: paymentIntent.client_secret });
+    } catch (error) {
+        res.status(500).send({ error: error.message });
+    }
 };
