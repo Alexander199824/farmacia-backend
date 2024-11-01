@@ -33,11 +33,14 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.BLOB('long'), // Imagen de perfil
             allowNull: true
         }
-    });
-
-    // Encriptar la contraseña antes de guardar
-    User.beforeCreate(async (user) => {
-        user.password = await bcrypt.hash(user.password, 12);
+    }, {
+        hooks: {
+            beforeCreate: async (user) => {
+                if (user.password) {
+                    user.password = await bcrypt.hash(user.password, 12);
+                }
+            }
+        }
     });
 
     return User;

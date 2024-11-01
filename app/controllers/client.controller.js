@@ -8,6 +8,12 @@ exports.createClient = async (req, res) => {
     const { name, dpi, birthDate, email, phone, address } = req.body;
     const image = req.file ? req.file.buffer : null; // Almacena la imagen como BLOB
 
+    // Verifica si el DPI o correo ya existe en la tabla de clientes
+    const existingClient = await Client.findOne({ where: { dpi } });
+    if (existingClient) {
+      return res.status(400).json({ message: "DPI ya existe para otro cliente." });
+    }
+
     const client = await Client.create({
       name, dpi, birthDate, email, phone, address, image
     });

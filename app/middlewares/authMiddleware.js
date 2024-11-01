@@ -7,7 +7,7 @@ module.exports = (req, res, next) => {
     if (!token) return res.status(401).json({ message: "Acceso denegado" });
 
     try {
-        const decoded = jwt.verify(token, env.jwtSecret); // Usa la clave secreta desde env.js
+        const decoded = jwt.verify(token, env.jwtSecret);
         req.user = decoded;
         next();
     } catch (error) {
