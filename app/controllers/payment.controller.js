@@ -1,3 +1,4 @@
+
 // controllers/payment.controller.js
 const env = require('../config/env'); // Asegúrate de que la ruta sea correcta
 const Stripe = require('stripe');
@@ -10,7 +11,7 @@ exports.createPaymentIntent = async (req, res) => {
         const paymentIntent = await stripe.paymentIntents.create({
             amount,
             currency: 'usd',
-            // Puedes agregar más parámetros como "payment_method_types"
+            payment_method_types: ['card'], // Asegurando el tipo de método de pago
         });
         res.send({ clientSecret: paymentIntent.client_secret });
     } catch (error) {
