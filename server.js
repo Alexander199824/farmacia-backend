@@ -14,7 +14,11 @@ dotenv.config();
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+
+// Configura el tamaño límite para JSON y datos de formulario codificados en URL
+app.use(express.json({ limit: '100mb' })); // Ajusta el límite según tus necesidades
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+
 db.sequelize.sync({ alter: true })
   .then(() => {
     console.log("La base de datos ha sido sincronizada correctamente.");
@@ -22,6 +26,7 @@ db.sequelize.sync({ alter: true })
   .catch((error) => {
     console.error("Error al sincronizar la base de datos:", error);
   });
+
 // Configura las rutas de la API
 app.use('/api/users', userRoutes);
 app.use('/api/products', productsRoutes);
@@ -32,7 +37,7 @@ app.use('/api/invoices', invoiceRoutes);
 
 const PORT = process.env.PORT || 5000;
 
-// Sincroniza la base de datos con `force: true` para eliminar y recrear tablas
+// Sincroniza la base de datos con `force: false`
 db.sequelize.sync({ force: false }).then(() => {
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }).catch(error => {

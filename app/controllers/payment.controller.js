@@ -7,11 +7,12 @@ const InvoiceItem = db.InvoiceItem;
 const Payment = db.Payment;
 
 exports.createPaymentIntent = async (req, res) => {
+    console.log('Datos recibidos en /create-payment-intent:', req.body);
+    
     let { amount, clientId, sellerDPI, clientDPI, paymentMethod, items } = req.body;
 
-    // Asegúrate de que amount es un entero positivo
+    // Valida que `amount` sea un número entero positivo
     amount = parseInt(amount, 10);
-
     if (!Number.isInteger(amount) || amount <= 0) {
         return res.status(400).send({ error: 'El monto debe ser un entero positivo en centavos.' });
     }
@@ -24,7 +25,7 @@ exports.createPaymentIntent = async (req, res) => {
         });
 
         const payment = await Payment.create({
-            amount: amount / 100, // Stripe maneja en centavos
+            amount: amount / 100,
             currency: 'usd',
             status: 'pending',
             paymentIntentId: paymentIntent.id,
@@ -37,6 +38,7 @@ exports.createPaymentIntent = async (req, res) => {
         res.status(500).send({ error: error.message });
     }
 };
+
 
 exports.createInvoice = async (req, res) => {
     const { clientId, sellerDPI, clientDPI, paymentMethod, items } = req.body;
