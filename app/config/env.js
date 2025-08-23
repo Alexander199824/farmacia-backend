@@ -1,8 +1,8 @@
 const env = {
-  database: 'ejerciciousalama',
-  username: 'ejerciciousalama_user',
-  password: '3tFkTzNfRX3YA0vUFGEFA3BltC6GFlTu',
-  host: 'dpg-crvg8b88fa8c7399vm5g-a.oregon-postgres.render.com',
+ database: 'farmacia_elizabeth',
+  username: 'farmacia_elizabeth_user',
+  password: 'bUafM8S6K96YKitRFouYuTNcBqC1vvsx',
+  host: 'dpg-d2ksi8n5r7bs73d1mukg-a.oregon-postgres.render.com',
   dialect: 'postgres',
   pool: {
     max: 5,
