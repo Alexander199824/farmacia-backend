@@ -1,6 +1,20 @@
+/**
+ * @author Alexander Echeverria
+ * @file app/controllers/user.controller.js
+ * @description Controlador de Usuarios - Incluye endpoint /profile
+ * @location app/controllers/user.controller.js
+ * 
+ * Funcionalidades:
+ * - Registro de usuarios
+ * - Login con JWT
+ * - CRUD completo de usuarios
+ * - Obtener perfil del usuario autenticado
+ */
+
 const db = require('../config/db.config.js');
 const env = require('../config/env.js');
 const User = db.User;
+const Worker = db.Worker;
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 
@@ -44,6 +58,49 @@ exports.login = async (req, res) => {
         }
     } catch (error) {
         res.status(500).json({ message: "Error en el inicio de sesión", error: error.message });
+    }
+};
+
+// Obtener perfil del usuario autenticado
+exports.getProfile = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        const user = await User.findByPk(userId, {
+            attributes: ['id', 'username', 'dpi', 'role', 'userType'],
+            include: [{
+                model: Worker,
+                as: 'user',
+                attributes: ['name', 'email', 'phone'],
+                required: false
+            }]
+        });
+        
+        if (!user) {
+            return res.status(404).json({ message: 'Usuario no encontrado' });
+        }
+
+        // Buscar también en la tabla de Workers por DPI si no hay relación directa
+        let workerData = user.user;
+        if (!workerData) {
+            workerData = await Worker.findOne({
+                where: { dpi: user.dpi },
+                attributes: ['name', 'email', 'phone']
+            });
+        }
+
+        res.json({
+            id: user.id,
+            dpi: user.dpi,
+            name: workerData?.name || user.username,
+            email: workerData?.email || null,
+            phone: workerData?.phone || null,
+            role: user.role,
+            userType: user.userType
+        });
+    } catch (error) {
+        console.error('Error en getProfile:', error);
+        res.status(500).json({ message: 'Error al obtener perfil', error: error.message });
     }
 };
 
