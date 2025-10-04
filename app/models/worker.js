@@ -1,5 +1,21 @@
+/**
+ * @author Alexander Echeverria
+ * @file app/models/worker.js
+ * @description Modelo de Trabajador - CORREGIDO
+ * @location app/models/worker.js
+ * 
+ * Correcciones:
+ * - Asociación foreignKey corregida de 'id' a 'userId'
+ * - Alias corregido de 'Users' a 'user'
+ */
+
 module.exports = (sequelize, DataTypes) => {
   const Worker = sequelize.define('Worker', {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true
+    },
     name: {
       type: DataTypes.STRING,
       allowNull: false
@@ -29,14 +45,14 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false
     },
     image: {
-      type: DataTypes.BLOB('long'), // Almacenar imagen como BLOB
+      type: DataTypes.BLOB('long'),
       allowNull: true
     },
     userId: {
       type: DataTypes.INTEGER,
       allowNull: true,
       references: {
-        model: 'Users', // Nombre de la tabla de usuarios
+        model: 'Users',
         key: 'id'
       }
     }
@@ -44,8 +60,8 @@ module.exports = (sequelize, DataTypes) => {
 
   Worker.associate = (models) => {
     Worker.belongsTo(models.User, {
-      foreignKey: 'id',
-      as: 'Users'
+      foreignKey: 'userId',  // ✅ CORREGIDO: era 'id'
+      as: 'user'             // ✅ CORREGIDO: era 'Users'
     });
   };
 

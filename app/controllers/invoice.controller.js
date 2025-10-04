@@ -1,6 +1,19 @@
+/**
+ * @author Alexander Echeverria
+ * @file app/controllers/invoice.controller.js
+ * @description Controlador de Facturas - Incluye /next-number
+ * @location app/controllers/invoice.controller.js
+ * 
+ * Funcionalidades:
+ * - CRUD completo de facturas
+ * - Obtener próximo número de factura
+ * - Actualización automática de stock
+ */
+
 const db = require('../config/db.config');
 const Invoice = db.Invoice;
 const InvoiceItem = db.InvoiceItem;
+const Product = db.Product;
 
 // Crear una nueva factura
 exports.createInvoice = async (req, res) => {
@@ -34,7 +47,7 @@ exports.createInvoice = async (req, res) => {
       { include: [{ model: InvoiceItem, as: 'items' }] }
     );
 
-    // Crear los items de la factura
+    // Crear los items de la factura y actualizar stock
     for (const item of items) {
       await InvoiceItem.create({
         invoiceId: invoice.id,
@@ -43,6 +56,14 @@ exports.createInvoice = async (req, res) => {
         unitPrice: item.unitPrice,
         totalPrice: item.quantity * item.unitPrice,
       });
+
+      // Actualizar stock del producto
+      const product = await Product.findByPk(item.productId);
+      if (product) {
+        await product.update({
+          stock: product.stock - item.quantity
+        });
+      }
     }
 
     res.status(201).json({ message: "Factura creada con éxito", invoice });
@@ -56,7 +77,24 @@ exports.createInvoice = async (req, res) => {
 exports.getAllInvoices = async (req, res) => {
   try {
     const invoices = await Invoice.findAll({
-      include: [{ model: InvoiceItem, as: 'items' }]
+      include: [
+        { 
+          model: InvoiceItem, 
+          as: 'items',
+          include: [{
+            model: Product,
+            as: 'product',
+            attributes: ['id', 'name', 'price']
+          }]
+        },
+        {
+          model: db.Client,
+          as: 'client',
+          attributes: ['id', 'name', 'dpi'],
+          required: false
+        }
+      ],
+      order: [['date', 'DESC']]
     });
     res.status(200).json(invoices);
   } catch (error) {
@@ -69,10 +107,29 @@ exports.getAllInvoices = async (req, res) => {
 exports.getInvoiceById = async (req, res) => {
   try {
     const invoice = await Invoice.findByPk(req.params.id, {
-      include: [{ model: InvoiceItem, as: 'items' }]
+      include: [
+        { 
+          model: InvoiceItem, 
+          as: 'items',
+          include: [{
+            model: Product,
+            as: 'product',
+            attributes: ['id', 'name', 'price', 'description']
+          }]
+        },
+        {
+          model: db.Client,
+          as: 'client',
+          attributes: ['id', 'name', 'dpi', 'email', 'phone'],
+          required: false
+        }
+      ]
     });
-    if (invoice) res.status(200).json(invoice);
-    else res.status(404).json({ message: "Factura no encontrada" });
+    if (invoice) {
+      res.status(200).json(invoice);
+    } else {
+      res.status(404).json({ message: "Factura no encontrada" });
+    }
   } catch (error) {
     console.error("Error al obtener factura:", error);
     res.status(500).json({ message: "Error al obtener factura", error: error.message });
@@ -146,7 +203,9 @@ exports.deleteInvoice = async (req, res) => {
 exports.getNextInvoiceNumber = async (req, res) => {
   try {
     console.log("Fetching last invoice to determine next invoice number.");
-    const lastInvoice = await Invoice.findOne({ order: [['id', 'DESC']] });
+    const lastInvoice = await Invoice.findOne({ 
+      order: [['id', 'DESC']] 
+    });
     
     const nextInvoiceNumber = lastInvoice ? lastInvoice.id + 1 : 1;
     
@@ -154,6 +213,9 @@ exports.getNextInvoiceNumber = async (req, res) => {
     console.log("Next invoice number:", nextInvoiceNumber);
   } catch (error) {
     console.error("Error al obtener el número de factura:", error.message);
-    res.status(500).json({ message: "Error al obtener el número de factura", error: error.message });
+    res.status(500).json({ 
+      message: "Error al obtener el número de factura", 
+      error: error.message 
+    });
   }
 };
