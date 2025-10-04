@@ -1,15 +1,12 @@
 /**
  * @author Alexander Echeverria
  * @file app/models/batch.js
- * @description Modelo de Lotes para control de vencimientos y trazabilidad de productos farmacéuticos
+ * @description Modelo de Lotes - CORREGIDO para evitar errores de sintaxis SQL
  * @location app/models/batch.js
  * 
- * Este modelo maneja:
- * - Control de lotes por producto
- * - Fechas de vencimiento
- * - Cantidades por lote
- * - Trazabilidad FIFO (First In, First Out)
- * - Alertas de productos próximos a vencer
+ * Correcciones:
+ * - Uso de índice único en lugar de constraint inline
+ * - Evita error "syntax error at or near UNIQUE" en PostgreSQL
  */
 
 module.exports = (sequelize, DataTypes) => {
@@ -30,7 +27,7 @@ module.exports = (sequelize, DataTypes) => {
         batchNumber: {
             type: DataTypes.STRING,
             allowNull: false,
-            unique: true,
+            // NO usar unique: true aquí para evitar errores con ALTER TABLE
             comment: 'Número de lote único proporcionado por el fabricante'
         },
         manufacturingDate: {
@@ -86,7 +83,23 @@ module.exports = (sequelize, DataTypes) => {
         }
     }, {
         timestamps: true,
-        paranoid: true, // Soft delete
+        paranoid: true,
+        indexes: [
+            {
+                unique: true,
+                fields: ['batchNumber'],
+                name: 'unique_batch_number' // Índice único separado
+            },
+            {
+                fields: ['productId']
+            },
+            {
+                fields: ['expirationDate']
+            },
+            {
+                fields: ['status']
+            }
+        ],
         hooks: {
             beforeCreate: async (batch) => {
                 // Verificar si el lote ya venció
