@@ -1,21 +1,34 @@
 /**
  * @author Alexander Echeverria
  * @file server.js
- * @description Servidor principal con función de reset de tablas
+ * @description Servidor principal con configuración simple
  * @location server.js
- * 
- * Configuración:
- * - Express server
- * - CORS habilitado
- * - Rutas de API
- * - Sincronización de base de datos
- * - RESET de tablas para aplicar cambios de modelos
  */
 
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const db = require('./app/config/db.config');
+const bcrypt = require('bcrypt');
+
+// ╔══════════════════════════════════════════════════════════╗
+// ║        🔧 CONFIGURACIÓN DEL SISTEMA (EDITABLE)          ║
+// ╚══════════════════════════════════════════════════════════╝
+
+const CONFIG = {
+    // ⚙️ RECREAR TABLAS: true = Elimina y recrea todas las tablas (BORRA DATOS)
+    RECREATE_TABLES: true,  // ⬅️ Cambia a false para NO recrear tablas
+    
+    // 👥 INSERTAR USUARIOS: true = Crea usuarios por defecto
+    INSERT_USERS: true,     // ⬅️ Cambia a false para NO insertar usuarios
+    
+    // 📦 INSERTAR DATOS DE PRUEBA: true = Crea productos y lotes de ejemplo
+    INSERT_SAMPLE_DATA: true  // ⬅️ Cambia a false para NO insertar datos de prueba
+};
+
+// ╔══════════════════════════════════════════════════════════╗
+// ║              NO EDITAR DEBAJO DE ESTA LÍNEA             ║
+// ╚══════════════════════════════════════════════════════════╝
 
 const app = express();
 
@@ -61,6 +74,11 @@ app.get('/', (req, res) => {
     res.json({ 
         message: "Farmacia Elizabeth API",
         version: "2.0.0",
+        configuration: {
+            tablesRecreated: CONFIG.RECREATE_TABLES,
+            usersInserted: CONFIG.INSERT_USERS,
+            sampleDataInserted: CONFIG.INSERT_SAMPLE_DATA
+        },
         endpoints: {
             products: "/api/products",
             users: "/api/users",
@@ -78,150 +96,213 @@ app.get('/', (req, res) => {
     });
 });
 
-// ========== FUNCIÓN PARA RESETEAR TABLAS ==========
-/**
- * Resetea todas las tablas eliminándolas y recreándolas
- * @param {boolean} withSeed - Si es true, inserta datos de prueba
- */
-async function resetDatabase(withSeed = false) {
+// ========== FUNCIÓN PARA INSERTAR USUARIOS POR DEFECTO ==========
+async function createDefaultUsers() {
     try {
-        console.log('\n🔄 Iniciando reset de base de datos...\n');
+        console.log('\n👥 Creando usuarios por defecto...\n');
 
-        // PASO 1: Eliminar todas las tablas (DROP)
-        console.log('📋 Paso 1: Eliminando tablas existentes...');
-        await db.sequelize.sync({ force: true });
-        console.log('✅ Tablas eliminadas correctamente\n');
-
-        // PASO 2: Recrear tablas con nueva estructura
-        console.log('📋 Paso 2: Recreando tablas con nueva estructura...');
-        await db.sequelize.sync();
-        console.log('✅ Tablas recreadas correctamente\n');
-
-        // PASO 3: Insertar datos de prueba (opcional)
-        if (withSeed) {
-            console.log('📋 Paso 3: Insertando datos de prueba...');
-            await seedDatabase();
-            console.log('✅ Datos de prueba insertados\n');
+        // 1. Usuario ADMINISTRADOR
+        const adminExists = await db.User.findOne({ where: { username: 'admin' }});
+        if (!adminExists) {
+            const adminPassword = await bcrypt.hash('admin123', 12);
+            const adminUser = await db.User.create({
+                username: 'admin',
+                password: adminPassword,
+                role: 'administrador',
+                userType: 'trabajador',
+                dpi: '1111111111111'
+            });
+            
+            await db.Worker.create({
+                name: 'Administrador Principal',
+                dpi: '1111111111111',
+                birthDate: '1990-01-01',
+                email: 'admin@farmacia.com',
+                phone: '1111-1111',
+                address: 'Ciudad de Guatemala',
+                role: 'Administrador',
+                userId: adminUser.id
+            });
+            
+            console.log('  ✅ ADMINISTRADOR creado:');
+            console.log('     👤 Usuario: admin');
+            console.log('     🔑 Contraseña: admin123');
+            console.log('     📝 DPI: 1111111111111');
+            console.log('     📧 Email: admin@farmacia.com\n');
+        } else {
+            console.log('  ℹ️  Usuario ADMINISTRADOR ya existe\n');
         }
 
-        console.log('🎉 Reset de base de datos completado exitosamente!\n');
-        
-        // Mostrar tablas creadas
-        const tables = Object.keys(db).filter(key => 
-            key !== 'Sequelize' && key !== 'sequelize'
-        );
-        console.log('📦 Tablas disponibles:', tables.join(', '));
-        console.log('\n');
+        // 2. Usuario VENDEDOR
+        const workerExists = await db.User.findOne({ where: { username: 'vendedor' }});
+        if (!workerExists) {
+            const workerPassword = await bcrypt.hash('vendedor123', 12);
+            const workerUser = await db.User.create({
+                username: 'vendedor',
+                password: workerPassword,
+                role: 'vendedor',
+                userType: 'trabajador',
+                dpi: '2222222222222'
+            });
+            
+            await db.Worker.create({
+                name: 'Juan Pérez',
+                dpi: '2222222222222',
+                birthDate: '1995-05-15',
+                email: 'vendedor@farmacia.com',
+                phone: '2222-2222',
+                address: 'Guatemala',
+                role: 'Vendedor',
+                userId: workerUser.id
+            });
+            
+            console.log('  ✅ VENDEDOR creado:');
+            console.log('     👤 Usuario: vendedor');
+            console.log('     🔑 Contraseña: vendedor123');
+            console.log('     📝 DPI: 2222222222222');
+            console.log('     📧 Email: vendedor@farmacia.com\n');
+        } else {
+            console.log('  ℹ️  Usuario VENDEDOR ya existe\n');
+        }
 
+        // 3. Usuario CLIENTE
+        const clientExists = await db.User.findOne({ where: { username: 'cliente' }});
+        if (!clientExists) {
+            const clientPassword = await bcrypt.hash('cliente123', 12);
+            const clientUser = await db.User.create({
+                username: 'cliente',
+                password: clientPassword,
+                role: 'cliente',
+                userType: 'cliente',
+                dpi: '3333333333333'
+            });
+            
+            await db.Client.create({
+                name: 'María García',
+                dpi: '3333333333333',
+                birthDate: '1992-08-20',
+                email: 'cliente@farmacia.com',
+                phone: '3333-3333',
+                address: 'Ciudad de Guatemala',
+                userId: clientUser.id
+            });
+            
+            console.log('  ✅ CLIENTE creado:');
+            console.log('     👤 Usuario: cliente');
+            console.log('     🔑 Contraseña: cliente123');
+            console.log('     📝 DPI: 3333333333333');
+            console.log('     📧 Email: cliente@farmacia.com\n');
+        } else {
+            console.log('  ℹ️  Usuario CLIENTE ya existe\n');
+        }
+
+        console.log('✅ Usuarios por defecto completados!\n');
+        
     } catch (error) {
-        console.error('❌ Error al resetear la base de datos:', error);
+        console.error('❌ Error al crear usuarios:', error.message);
         throw error;
     }
 }
 
 // ========== FUNCIÓN PARA INSERTAR DATOS DE PRUEBA ==========
-async function seedDatabase() {
-    const bcrypt = require('bcrypt');
-
+async function createSampleData() {
     try {
-        // Usuario administrador de prueba
-        const hashedPassword = await bcrypt.hash('admin123', 12);
-        await db.User.create({
-            username: 'admin',
-            password: hashedPassword,
-            role: 'administrador',
-            userType: 'trabajador',
-            dpi: '1234567890101'
-        });
-        console.log('  ✓ Usuario admin creado (user: admin, pass: admin123)');
-
-        // Cliente de prueba
-        await db.Client.create({
-            name: 'Cliente Prueba',
-            dpi: '9876543210101',
-            birthDate: '1990-01-01',
-            email: 'cliente@prueba.com',
-            phone: '12345678',
-            address: 'Ciudad de Guatemala'
-        });
-        console.log('  ✓ Cliente de prueba creado');
+        console.log('📦 Creando datos de prueba...\n');
 
         // Producto de prueba
-        const product = await db.Product.create({
-            name: 'Paracetamol 500mg',
-            description: 'Analgésico y antipirético',
-            price: 25.50,
-            stock: 100,
-            supplier: 'Farmacéuticos Unidos'
-        });
-        console.log('  ✓ Producto de prueba creado');
+        const productExists = await db.Product.findOne({ where: { name: 'Paracetamol 500mg' }});
+        if (!productExists) {
+            const product = await db.Product.create({
+                name: 'Paracetamol 500mg',
+                description: 'Analgésico y antipirético',
+                price: 25.50,
+                stock: 100,
+                supplier: 'Farmacéuticos Unidos'
+            });
+            console.log('  ✅ Producto creado: Paracetamol 500mg');
 
-        // Lote de prueba
-        await db.Batch.create({
-            productId: product.id,
-            batchNumber: 'LOT-2025-001',
-            manufacturingDate: '2025-01-01',
-            expirationDate: '2027-01-01',
-            quantity: 100,
-            initialQuantity: 100,
-            purchasePrice: 20.00,
-            salePrice: 25.50,
-            supplier: 'Farmacéuticos Unidos',
-            location: 'Bodega A',
-            status: 'active'
-        });
-        console.log('  ✓ Lote de prueba creado');
+            // Lote de prueba
+            await db.Batch.create({
+                productId: product.id,
+                batchNumber: 'LOT-2025-001',
+                manufacturingDate: '2025-01-01',
+                expirationDate: '2027-01-01',
+                quantity: 100,
+                initialQuantity: 100,
+                purchasePrice: 20.00,
+                salePrice: 25.50,
+                supplier: 'Farmacéuticos Unidos',
+                location: 'Bodega A',
+                status: 'active'
+            });
+            console.log('  ✅ Lote creado: LOT-2025-001\n');
+        } else {
+            console.log('  ℹ️  Datos de prueba ya existen\n');
+        }
 
     } catch (error) {
-        console.error('  ❌ Error al insertar datos de prueba:', error.message);
+        console.error('❌ Error al crear datos de prueba:', error.message);
     }
 }
-
-// ========== CONFIGURACIÓN DE SINCRONIZACIÓN ==========
-/**
- * Configura el modo de sincronización de la base de datos
- * 
- * Opciones:
- * - DEVELOPMENT: { force: true } - Elimina y recrea todas las tablas (SOLO DESARROLLO)
- * - STAGING: { alter: true } - Modifica tablas existentes (puede perder datos)
- * - PRODUCTION: { } - Solo crea tablas que no existen (SEGURO)
- */
-
-// ========== VARIABLE DE ENTORNO PARA RESET ==========
-const RESET_DB = process.env.RESET_DB === 'true';
-const SEED_DB = process.env.SEED_DB === 'true';
-const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // ========== SINCRONIZAR BASE DE DATOS ==========
 async function initDatabase() {
     try {
-        if (RESET_DB) {
-            // MODO RESET: Elimina y recrea todas las tablas
-            console.log('⚠️  MODO RESET ACTIVADO - Se eliminarán todas las tablas\n');
-            await resetDatabase(SEED_DB);
+        console.log('\n╔══════════════════════════════════════════════════════════╗');
+        console.log('║       🏥 FARMACIA ELIZABETH - INICIALIZACIÓN            ║');
+        console.log('╚══════════════════════════════════════════════════════════╝\n');
+
+        // Mostrar configuración actual
+        console.log('⚙️  CONFIGURACIÓN ACTUAL:');
+        console.log(`   📋 Recrear tablas: ${CONFIG.RECREATE_TABLES ? '✅ SI' : '❌ NO'}`);
+        console.log(`   👥 Insertar usuarios: ${CONFIG.INSERT_USERS ? '✅ SI' : '❌ NO'}`);
+        console.log(`   📦 Datos de prueba: ${CONFIG.INSERT_SAMPLE_DATA ? '✅ SI' : '❌ NO'}\n`);
+
+        // PASO 1: Sincronizar base de datos
+        if (CONFIG.RECREATE_TABLES) {
+            console.log('🔄 RECREANDO TABLAS (se eliminarán datos existentes)...\n');
+            await db.sequelize.sync({ force: true });
+            console.log('✅ Tablas recreadas correctamente\n');
         } else {
-            // MODO NORMAL: Sincronización según entorno
-            const syncOptions = {
-                development: { alter: true },  // Modifica tablas en desarrollo
-                staging: { alter: true },      // Modifica tablas en staging
-                production: { }                // Solo crea nuevas en producción
-            };
-
-            const options = syncOptions[NODE_ENV] || syncOptions.development;
-            
-            console.log(`🔧 Sincronizando base de datos en modo: ${NODE_ENV.toUpperCase()}`);
-            console.log(`📝 Opciones: ${JSON.stringify(options)}\n`);
-
-            await db.sequelize.sync(options);
-            
-            console.log('✅ Base de datos sincronizada correctamente');
-            console.log('📦 Modelos disponibles:', Object.keys(db).filter(key => 
-                key !== 'Sequelize' && key !== 'sequelize'
-            ).join(', '));
-            console.log('\n');
+            console.log('🔧 Sincronizando base de datos (sin eliminar datos)...\n');
+            await db.sequelize.sync();
+            console.log('✅ Base de datos sincronizada\n');
         }
+
+        // PASO 2: Insertar usuarios por defecto
+        if (CONFIG.INSERT_USERS) {
+            await createDefaultUsers();
+        } else {
+            console.log('⏭️  Omitiendo creación de usuarios por defecto\n');
+        }
+
+        // PASO 3: Insertar datos de prueba
+        if (CONFIG.INSERT_SAMPLE_DATA) {
+            await createSampleData();
+        } else {
+            console.log('⏭️  Omitiendo datos de prueba\n');
+        }
+
+        // Mostrar resumen
+        console.log('╔══════════════════════════════════════════════════════════╗');
+        console.log('║              ✅ INICIALIZACIÓN COMPLETADA               ║');
+        console.log('╚══════════════════════════════════════════════════════════╝\n');
+
+        if (CONFIG.INSERT_USERS) {
+            console.log('📊 USUARIOS DISPONIBLES:');
+            console.log('   1. admin / admin123 (Administrador)');
+            console.log('   2. vendedor / vendedor123 (Vendedor)');
+            console.log('   3. cliente / cliente123 (Cliente)\n');
+        }
+
+        console.log('📦 Modelos cargados:', Object.keys(db).filter(key => 
+            key !== 'Sequelize' && key !== 'sequelize'
+        ).join(', '));
+        console.log('\n');
+
     } catch (err) {
-        console.error('❌ Error al sincronizar la base de datos:', err);
+        console.error('\n❌ ERROR AL INICIALIZAR LA BASE DE DATOS:');
+        console.error(err);
         process.exit(1);
     }
 }
@@ -232,17 +313,14 @@ initDatabase();
 // ========== INICIAR SERVIDOR ==========
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-    console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
-    console.log(`📍 URL: http://localhost:${PORT}`);
-    console.log(`\n📚 Documentación de API: http://localhost:${PORT}/`);
+    console.log('╔══════════════════════════════════════════════════════════╗');
+    console.log('║          🚀 FARMACIA ELIZABETH - API ACTIVA             ║');
+    console.log('╚══════════════════════════════════════════════════════════╝');
+    console.log(`\n📍 Servidor corriendo en: http://localhost:${PORT}`);
+    console.log(`📚 Documentación API: http://localhost:${PORT}/\n`);
     
-    if (RESET_DB) {
-        console.log('\n⚠️  BASE DE DATOS RESETEADA - Datos anteriores eliminados');
-    }
-    
-    console.log('\n💡 Comandos útiles:');
-    console.log('   RESET_DB=true npm run dev          # Resetear y recrear tablas');
-    console.log('   RESET_DB=true SEED_DB=true npm run dev  # Resetear con datos de prueba');
-    console.log('   NODE_ENV=production npm run dev    # Modo producción (seguro)');
-    console.log('\n');
+    console.log('💡 Para cambiar la configuración:');
+    console.log('   1. Abre server.js');
+    console.log('   2. Edita las variables en CONFIG (líneas 16-24)');
+    console.log('   3. Reinicia el servidor (Ctrl+C y npm start)\n');
 });

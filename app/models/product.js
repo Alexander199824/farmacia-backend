@@ -1,3 +1,10 @@
+/**
+ * @author Alexander Echeverria
+ * @file app/models/product.js
+ * @description Modelo de Producto - BLOB corregido para PostgreSQL
+ * @location app/models/product.js
+ */
+
 module.exports = (sequelize, Sequelize) => {
     const Product = sequelize.define('productos', {
         id: {
@@ -25,7 +32,7 @@ module.exports = (sequelize, Sequelize) => {
             allowNull: false
         },
         image: {
-            type: Sequelize.BLOB('long'), // Campo para almacenar la imagen como BLOB
+            type: Sequelize.BLOB,  // ✅ Corregido: sin 'long'
             allowNull: true
         }
     });

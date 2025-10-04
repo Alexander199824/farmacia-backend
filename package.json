@@ -6,16 +6,13 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    
     "db:reset": "node resetDatabase.js",
     "db:reset:seed": "node resetDatabase.js --seed",
     "db:fresh": "RESET_DB=true npm run dev",
     "db:fresh:seed": "RESET_DB=true SEED_DB=true npm run dev",
-    
     "db:dev": "NODE_ENV=development npm run dev",
     "db:staging": "NODE_ENV=staging npm run dev",
     "db:production": "NODE_ENV=production npm start",
-    
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

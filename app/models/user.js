@@ -1,3 +1,10 @@
+/**
+ * @author Alexander Echeverria
+ * @file app/models/user.js
+ * @description Modelo de Usuario - BLOB corregido para PostgreSQL
+ * @location app/models/user.js
+ */
+
 const bcrypt = require('bcrypt');
 
 module.exports = (sequelize, DataTypes) => {
@@ -10,7 +17,7 @@ module.exports = (sequelize, DataTypes) => {
         username: {
             type: DataTypes.STRING,
             allowNull: false,
-            unique: true
+            comment: 'Nombre de usuario único'
         },
         password: {
             type: DataTypes.STRING,
@@ -27,16 +34,40 @@ module.exports = (sequelize, DataTypes) => {
         dpi: {
             type: DataTypes.STRING,
             allowNull: false,
-            unique: true
+            comment: 'DPI único del usuario'
         },
         image: {
-            type: DataTypes.BLOB('long'), // Imagen de perfil
+            type: DataTypes.BLOB,  // ✅ Corregido: sin 'long'
             allowNull: true
         }
     }, {
+        timestamps: true,
+        indexes: [
+            {
+                unique: true,
+                fields: ['username'],
+                name: 'unique_user_username'
+            },
+            {
+                unique: true,
+                fields: ['dpi'],
+                name: 'unique_user_dpi'
+            },
+            {
+                fields: ['role']
+            },
+            {
+                fields: ['userType']
+            }
+        ],
         hooks: {
             beforeCreate: async (user) => {
                 if (user.password) {
+                    user.password = await bcrypt.hash(user.password, 12);
+                }
+            },
+            beforeUpdate: async (user) => {
+                if (user.changed('password')) {
                     user.password = await bcrypt.hash(user.password, 12);
                 }
             }

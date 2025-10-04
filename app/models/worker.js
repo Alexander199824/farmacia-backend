@@ -1,12 +1,8 @@
 /**
  * @author Alexander Echeverria
  * @file app/models/worker.js
- * @description Modelo de Trabajador - CORREGIDO
+ * @description Modelo de Trabajador - BLOB corregido para PostgreSQL
  * @location app/models/worker.js
- * 
- * Correcciones:
- * - Asociación foreignKey corregida de 'id' a 'userId'
- * - Alias corregido de 'Users' a 'user'
  */
 
 module.exports = (sequelize, DataTypes) => {
@@ -45,7 +41,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false
     },
     image: {
-      type: DataTypes.BLOB('long'),
+      type: DataTypes.BLOB,  // ✅ Corregido: sin 'long'
       allowNull: true
     },
     userId: {
@@ -60,8 +56,8 @@ module.exports = (sequelize, DataTypes) => {
 
   Worker.associate = (models) => {
     Worker.belongsTo(models.User, {
-      foreignKey: 'userId',  // ✅ CORREGIDO: era 'id'
-      as: 'user'             // ✅ CORREGIDO: era 'Users'
+      foreignKey: 'userId',
+      as: 'user'
     });
   };
 
