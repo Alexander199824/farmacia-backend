@@ -1,51 +1,164 @@
-// Importa la configuración del entorno desde el archivo env.js
-const env = require('./env.js');
+/**
+ * @author Alexander Echeverria
+ * @file app/config/db.config.js
+ * @description Configuración de base de datos con todos los modelos del sistema
+ * @location app/config/db.config.js
+ * 
+ * Configura:
+ * - Conexión a PostgreSQL
+ * - Pool de conexiones
+ * - Modelos principales
+ * - Nuevos modelos: Batch, Receipt, InventoryMovement, AuditLog
+ * - Relaciones entre modelos
+ */
 
-// Importa el módulo Sequelize
+const env = require('./env.js');
 const Sequelize = require('sequelize');
 
-// Crea una nueva instancia de Sequelize para conectarse a la base de datos
+// Crear instancia de Sequelize
 const sequelize = new Sequelize(env.database, env.username, env.password, {
-  host: env.host, // Dirección del host de la base de datos
-  dialect: env.dialect, // Dialecto de la base de datos (e.g., 'mysql', 'postgres')
+  host: env.host,
+  dialect: env.dialect,
   dialectOptions: {
-    ssl: { // Configuración de SSL
-      require: true, // Requiere conexión SSL
-      rejectUnauthorized: false // No rechazar conexiones no autorizadas (útil para ciertos entornos)
+    ssl: {
+      require: true,
+      rejectUnauthorized: false
     }
   },
   pool: {
-    max: env.pool.max, // Número máximo de conexiones en el pool
-    min: env.pool.min, // Número mínimo de conexiones en el pool
-    acquire: env.pool.acquire, // Tiempo máximo de espera para adquirir una conexión
-    idle: env.pool.idle, // Tiempo máximo que una conexión puede estar inactiva
-  }
+    max: env.pool.max,
+    min: env.pool.min,
+    acquire: env.pool.acquire,
+    idle: env.pool.idle,
+  },
+  logging: false // Cambiar a console.log para debugging
 });
 
-// Crea un objeto para almacenar el módulo de la base de datos
 const db = {};
 
-// Almacena la clase Sequelize en el objeto db
 db.Sequelize = Sequelize;
-// Almacena la instancia de conexión de Sequelize en el objeto db
 db.sequelize = sequelize;
 
-// Importa y define los modelos en el objeto db
+// ========== MODELOS PRINCIPALES ==========
 db.Product = require('../models/product.js')(sequelize, Sequelize);
 db.User = require('../models/user.js')(sequelize, Sequelize);
-db.Worker = require('../models/worker.js')(sequelize, Sequelize); // Modelo de Trabajadores
-db.Client = require('../models/client.js')(sequelize, Sequelize); // Modelo de Clientes
-db.Invoice = require('../models/invoice.js')(sequelize, Sequelize); // Modelo de Facturas
-db.InvoiceItem = require('../models/invoiceItem.js')(sequelize, Sequelize); // Modelo de Items de Facturas
+db.Worker = require('../models/worker.js')(sequelize, Sequelize);
+db.Client = require('../models/client.js')(sequelize, Sequelize);
+db.Invoice = require('../models/invoice.js')(sequelize, Sequelize);
+db.InvoiceItem = require('../models/invoiceItem.js')(sequelize, Sequelize);
 db.Payment = require('../models/payment.js')(sequelize, Sequelize);
 
-// Define relaciones entre los modelos
-db.Invoice.hasMany(db.InvoiceItem, { as: 'items' });
-db.InvoiceItem.belongsTo(db.Invoice);
-db.InvoiceItem.belongsTo(db.Product);
-db.Worker.belongsTo(db.User, { foreignKey: 'userId', as: 'user' }); // Asocia trabajador con usuario
-db.Client.belongsTo(db.User, { foreignKey: 'userId', as: 'user' }); // Asocia cliente con usuario
+// ========== NUEVOS MODELOS ==========
+db.Batch = require('../models/batch.js')(sequelize, Sequelize);
+db.Receipt = require('../models/receipt.js')(sequelize, Sequelize);
+db.InventoryMovement = require('../models/inventoryMovement.js')(sequelize, Sequelize);
+db.AuditLog = require('../models/auditLog.js')(sequelize, Sequelize);
 
-// Exporta el objeto db para usarlo en otras partes de la aplicación
+// ========== RELACIONES EXISTENTES ==========
+// Facturas e Items
+db.Invoice.hasMany(db.InvoiceItem, { as: 'items', foreignKey: 'invoiceId' });
+db.InvoiceItem.belongsTo(db.Invoice, { foreignKey: 'invoiceId' });
+db.InvoiceItem.belongsTo(db.Product, { foreignKey: 'productId' });
+
+// Usuarios
+db.Worker.belongsTo(db.User, { foreignKey: 'userId', as: 'user' });
+db.Client.belongsTo(db.User, { foreignKey: 'userId', as: 'user' });
+
+// ========== NUEVAS RELACIONES ==========
+
+// Lotes (Batches)
+db.Product.hasMany(db.Batch, { 
+    foreignKey: 'productId', 
+    as: 'batches' 
+});
+db.Batch.belongsTo(db.Product, { 
+    foreignKey: 'productId', 
+    as: 'product' 
+});
+
+// Recibos (Receipts)
+db.Invoice.hasMany(db.Receipt, { 
+    foreignKey: 'invoiceId', 
+    as: 'receipts' 
+});
+db.Receipt.belongsTo(db.Invoice, { 
+    foreignKey: 'invoiceId', 
+    as: 'invoice' 
+});
+
+db.Client.hasMany(db.Receipt, { 
+    foreignKey: 'clientId', 
+    as: 'receipts' 
+});
+db.Receipt.belongsTo(db.Client, { 
+    foreignKey: 'clientId', 
+    as: 'client' 
+});
+
+db.Payment.hasMany(db.Receipt, { 
+    foreignKey: 'paymentId', 
+    as: 'receipts' 
+});
+db.Receipt.belongsTo(db.Payment, { 
+    foreignKey: 'paymentId', 
+    as: 'payment' 
+});
+
+// Movimientos de Inventario
+db.Product.hasMany(db.InventoryMovement, { 
+    foreignKey: 'productId', 
+    as: 'movements' 
+});
+db.InventoryMovement.belongsTo(db.Product, { 
+    foreignKey: 'productId', 
+    as: 'product' 
+});
+
+db.Batch.hasMany(db.InventoryMovement, { 
+    foreignKey: 'batchId', 
+    as: 'movements' 
+});
+db.InventoryMovement.belongsTo(db.Batch, { 
+    foreignKey: 'batchId', 
+    as: 'batch' 
+});
+
+db.User.hasMany(db.InventoryMovement, { 
+    foreignKey: 'userId', 
+    as: 'movements' 
+});
+db.InventoryMovement.belongsTo(db.User, { 
+    foreignKey: 'userId', 
+    as: 'user' 
+});
+
+db.User.hasMany(db.InventoryMovement, { 
+    foreignKey: 'approvedBy', 
+    as: 'approvedMovements' 
+});
+db.InventoryMovement.belongsTo(db.User, { 
+    foreignKey: 'approvedBy', 
+    as: 'approver' 
+});
+
+// Auditoría
+db.User.hasMany(db.AuditLog, { 
+    foreignKey: 'userId', 
+    as: 'auditLogs' 
+});
+db.AuditLog.belongsTo(db.User, { 
+    foreignKey: 'userId', 
+    as: 'user' 
+});
+
+// Relación Cliente-Factura
+db.Client.hasMany(db.Invoice, {
+    foreignKey: 'clientId',
+    as: 'invoices'
+});
+db.Invoice.belongsTo(db.Client, {
+    foreignKey: 'clientId',
+    as: 'client'
+});
+
 module.exports = db;
-
