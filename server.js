@@ -104,10 +104,12 @@ async function createDefaultUsers() {
         // 1. Usuario ADMINISTRADOR
         const adminExists = await db.User.findOne({ where: { username: 'admin' }});
         if (!adminExists) {
-            const adminPassword = await bcrypt.hash('admin123', 12);
+            // ❌ ELIMINA ESTA LÍNEA:
+            // const adminPassword = await bcrypt.hash('admin123', 12);
+            
             const adminUser = await db.User.create({
                 username: 'admin',
-                password: adminPassword,
+                password: 'admin123',  // ✅ Sin hashear - el hook lo hará
                 role: 'administrador',
                 userType: 'trabajador',
                 dpi: '1111111111111'
@@ -136,10 +138,12 @@ async function createDefaultUsers() {
         // 2. Usuario VENDEDOR
         const workerExists = await db.User.findOne({ where: { username: 'vendedor' }});
         if (!workerExists) {
-            const workerPassword = await bcrypt.hash('vendedor123', 12);
+            // ❌ ELIMINA ESTA LÍNEA:
+            // const workerPassword = await bcrypt.hash('vendedor123', 12);
+            
             const workerUser = await db.User.create({
                 username: 'vendedor',
-                password: workerPassword,
+                password: 'vendedor123',  // ✅ Sin hashear
                 role: 'vendedor',
                 userType: 'trabajador',
                 dpi: '2222222222222'
@@ -168,10 +172,12 @@ async function createDefaultUsers() {
         // 3. Usuario CLIENTE
         const clientExists = await db.User.findOne({ where: { username: 'cliente' }});
         if (!clientExists) {
-            const clientPassword = await bcrypt.hash('cliente123', 12);
+            // ❌ ELIMINA ESTA LÍNEA:
+            // const clientPassword = await bcrypt.hash('cliente123', 12);
+            
             const clientUser = await db.User.create({
                 username: 'cliente',
-                password: clientPassword,
+                password: 'cliente123',  // ✅ Sin hashear
                 role: 'cliente',
                 userType: 'cliente',
                 dpi: '3333333333333'

@@ -1,8 +1,7 @@
 /**
- * @author Alexander Echeverria
- * @file app/models/client.js
- * @description Modelo de Cliente - BLOB corregido para PostgreSQL
- * @location app/models/client.js
+ * Modelo de Cliente
+ * Autor: Alexander Echeverria
+ * Ubicacion: app/models/Client.js
  */
 
 module.exports = (sequelize, DataTypes) => {
@@ -13,67 +12,55 @@ module.exports = (sequelize, DataTypes) => {
       autoIncrement: true
     },
     name: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(200),
       allowNull: false
     },
     dpi: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(13),
       allowNull: false,
-      comment: 'DPI del cliente'
+      unique: true
     },
     birthDate: {
-      type: DataTypes.DATE,
+      type: DataTypes.DATEONLY,
       allowNull: false
     },
     email: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(255),
       allowNull: false,
-      comment: 'Email del cliente'
+      unique: true,
+      validate: {
+        isEmail: true
+      }
     },
     phone: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(20),
+      allowNull: true
     },
     address: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT,
+      allowNull: true
     },
     image: {
-      type: DataTypes.BLOB,  // ✅ Corregido: sin 'long'
+      type: DataTypes.BLOB,
       allowNull: true
     },
     userId: {
       type: DataTypes.INTEGER,
       allowNull: true,
       references: {
-        model: 'Users',
+        model: 'users',
         key: 'id'
-      },
-      comment: 'Relación con tabla Users'
+      }
     }
   }, {
+    tableName: 'clients',
     timestamps: true,
+    paranoid: true,
     indexes: [
-      {
-        unique: true,
-        fields: ['dpi'],
-        name: 'unique_client_dpi'
-      },
-      {
-        unique: true,
-        fields: ['email'],
-        name: 'unique_client_email'
-      },
-      {
-        fields: ['userId']
-      }
+      { unique: true, fields: ['dpi'] },
+      { unique: true, fields: ['email'] }
     ]
   });
-
-  Client.associate = (models) => {
-    Client.belongsTo(models.User, {
-      foreignKey: 'userId',
-      as: 'user'
-    });
-  };
 
   return Client;
 };

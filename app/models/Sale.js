@@ -1,17 +1,17 @@
 /**
- * Modelo de Factura con numeracion automatica
+ * Modelo de Venta
  * Autor: Alexander Echeverria
- * Ubicacion: app/models/Invoice.js
+ * Ubicacion: app/models/Sale.js
  */
 
 module.exports = (sequelize, DataTypes) => {
-  const Invoice = sequelize.define('Invoice', {
+  const Sale = sequelize.define('Sale', {
     id: {
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true
     },
-    invoiceNumber: {
+    saleNumber: {
       type: DataTypes.STRING(50),
       allowNull: false,
       unique: true
@@ -20,7 +20,7 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: true,
       references: {
-        model: 'clients',
+        model: 'users',
         key: 'id'
       }
     },
@@ -32,24 +32,24 @@ module.exports = (sequelize, DataTypes) => {
         key: 'id'
       }
     },
-    sellerDPI: {
-      type: DataTypes.STRING(13),
-      allowNull: false
+    saleDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: false,
+      defaultValue: DataTypes.NOW
     },
-    clientDPI: {
-      type: DataTypes.STRING(13),
-      allowNull: false
+    saleTime: {
+      type: DataTypes.TIME,
+      allowNull: false,
+      defaultValue: DataTypes.NOW
     },
-    date: {
+    saleDateTime: {
       type: DataTypes.DATE,
+      allowNull: false,
       defaultValue: DataTypes.NOW
     },
     subtotal: {
       type: DataTypes.DECIMAL(12, 2),
-      allowNull: false,
-      validate: {
-        min: 0
-      }
+      allowNull: false
     },
     discount: {
       type: DataTypes.DECIMAL(12, 2),
@@ -59,12 +59,12 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DECIMAL(12, 2),
       defaultValue: 0.00
     },
-    totalAmount: {
+    total: {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: false
     },
     paymentMethod: {
-      type: DataTypes.ENUM('efectivo', 'tarjeta', 'paypal', 'stripe', 'transferencia'),
+      type: DataTypes.ENUM('efectivo', 'tarjeta', 'transferencia', 'credito'),
       allowNull: false
     },
     paymentStatus: {
@@ -75,44 +75,54 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.ENUM('completada', 'cancelada', 'devuelta'),
       defaultValue: 'completada'
     },
+    clientName: {
+      type: DataTypes.STRING(200),
+      allowNull: true
+    },
+    clientNit: {
+      type: DataTypes.STRING(20),
+      allowNull: true
+    },
     notes: {
       type: DataTypes.TEXT,
       allowNull: true
     }
   }, {
-    tableName: 'invoices',
+    tableName: 'sales',
     timestamps: true,
     paranoid: true,
     indexes: [
-      { unique: true, fields: ['invoiceNumber'] },
-      { fields: ['clientId'] },
+      { unique: true, fields: ['saleNumber'] },
+      { fields: ['saleDate'] },
+      { fields: ['saleDateTime'] },
       { fields: ['sellerId'] },
-      { fields: ['date'] }
+      { fields: ['status'] }
     ],
     hooks: {
-      beforeCreate: async (invoice) => {
-        if (!invoice.invoiceNumber) {
+      beforeCreate: async (sale) => {
+        if (!sale.saleNumber) {
           const year = new Date().getFullYear();
-          const lastInvoice = await sequelize.models.Invoice.findOne({
+          const month = String(new Date().getMonth() + 1).padStart(2, '0');
+          const lastSale = await sequelize.models.Sale.findOne({
             where: {
-              invoiceNumber: {
-                [sequelize.Sequelize.Op.like]: `FAC-${year}-%`
+              saleNumber: {
+                [sequelize.Sequelize.Op.like]: `VEN-${year}${month}-%`
               }
             },
             order: [['id', 'DESC']]
           });
 
           let nextNumber = 1;
-          if (lastInvoice) {
-            const parts = lastInvoice.invoiceNumber.split('-');
+          if (lastSale) {
+            const parts = lastSale.saleNumber.split('-');
             nextNumber = parseInt(parts[2]) + 1;
           }
 
-          invoice.invoiceNumber = `FAC-${year}-${String(nextNumber).padStart(6, '0')}`;
+          sale.saleNumber = `VEN-${year}${month}-${String(nextNumber).padStart(6, '0')}`;
         }
       }
     }
   });
 
-  return Invoice;
+  return Sale;
 };

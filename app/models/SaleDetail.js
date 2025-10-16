@@ -1,21 +1,21 @@
 /**
- * Modelo de Item de Factura con lote asociado
+ * Modelo de Detalle de Venta
  * Autor: Alexander Echeverria
- * Ubicacion: app/models/InvoiceItem.js
+ * Ubicacion: app/models/SaleDetail.js
  */
 
 module.exports = (sequelize, DataTypes) => {
-  const InvoiceItem = sequelize.define('InvoiceItem', {
+  const SaleDetail = sequelize.define('SaleDetail', {
     id: {
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true
     },
-    invoiceId: {
+    saleId: {
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: 'invoices',
+        model: 'sales',
         key: 'id'
       }
     },
@@ -58,19 +58,19 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: false
     },
-    totalPrice: {
+    total: {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: false
     }
   }, {
-    tableName: 'invoice_items',
+    tableName: 'sale_details',
     timestamps: true,
     indexes: [
-      { fields: ['invoiceId'] },
+      { fields: ['saleId'] },
       { fields: ['productId'] },
       { fields: ['batchId'] }
     ]
   });
 
-  return InvoiceItem;
+  return SaleDetail;
 };

@@ -1,21 +1,21 @@
 /**
- * Modelo de Item de Factura con lote asociado
+ * Modelo de Detalle de Compra
  * Autor: Alexander Echeverria
- * Ubicacion: app/models/InvoiceItem.js
+ * Ubicacion: app/models/PurchaseDetail.js
  */
 
 module.exports = (sequelize, DataTypes) => {
-  const InvoiceItem = sequelize.define('InvoiceItem', {
+  const PurchaseDetail = sequelize.define('PurchaseDetail', {
     id: {
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true
     },
-    invoiceId: {
+    purchaseId: {
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: 'invoices',
+        model: 'purchases',
         key: 'id'
       }
     },
@@ -42,35 +42,27 @@ module.exports = (sequelize, DataTypes) => {
         min: 1
       }
     },
-    unitPrice: {
-      type: DataTypes.DECIMAL(10, 2),
-      allowNull: false
-    },
     unitCost: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false
-    },
-    discount: {
-      type: DataTypes.DECIMAL(10, 2),
-      defaultValue: 0.00
     },
     subtotal: {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: false
     },
-    totalPrice: {
+    total: {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: false
     }
   }, {
-    tableName: 'invoice_items',
+    tableName: 'purchase_details',
     timestamps: true,
     indexes: [
-      { fields: ['invoiceId'] },
+      { fields: ['purchaseId'] },
       { fields: ['productId'] },
       { fields: ['batchId'] }
     ]
   });
 
-  return InvoiceItem;
+  return PurchaseDetail;
 };
