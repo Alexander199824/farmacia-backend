@@ -1,5 +1,5 @@
 /**
- * Modelo de Factura con numeracion automatica
+ * Modelo de Factura con todas las funcionalidades
  * Autor: Alexander Echeverria
  * Ubicacion: app/models/Invoice.js
  */
@@ -14,15 +14,17 @@ module.exports = (sequelize, DataTypes) => {
     invoiceNumber: {
       type: DataTypes.STRING(50),
       allowNull: false,
-      unique: true
+      unique: true,
+      comment: 'Numero de factura generado automaticamente'
     },
     clientId: {
       type: DataTypes.INTEGER,
       allowNull: true,
       references: {
-        model: 'clients',
+        model: 'users',
         key: 'id'
-      }
+      },
+      comment: 'Cliente que compra (usuario con rol cliente)'
     },
     sellerId: {
       type: DataTypes.INTEGER,
@@ -30,19 +32,26 @@ module.exports = (sequelize, DataTypes) => {
       references: {
         model: 'users',
         key: 'id'
-      }
+      },
+      comment: 'Vendedor que realiza la venta (usuario con rol vendedor)'
     },
-    sellerDPI: {
-      type: DataTypes.STRING(13),
-      allowNull: false
+    invoiceDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+      comment: 'Fecha de la factura'
     },
-    clientDPI: {
-      type: DataTypes.STRING(13),
-      allowNull: false
+    invoiceTime: {
+      type: DataTypes.TIME,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+      comment: 'Hora de la factura'
     },
-    date: {
+    invoiceDateTime: {
       type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+      comment: 'Fecha y hora completa'
     },
     subtotal: {
       type: DataTypes.DECIMAL(12, 2),
@@ -57,23 +66,44 @@ module.exports = (sequelize, DataTypes) => {
     },
     tax: {
       type: DataTypes.DECIMAL(12, 2),
-      defaultValue: 0.00
+      defaultValue: 0.00,
+      comment: 'IVA u otros impuestos'
     },
-    totalAmount: {
+    total: {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: false
     },
     paymentMethod: {
-      type: DataTypes.ENUM('efectivo', 'tarjeta', 'paypal', 'stripe', 'transferencia'),
+      type: DataTypes.ENUM('efectivo', 'tarjeta', 'transferencia', 'credito', 'paypal', 'stripe'),
       allowNull: false
     },
     paymentStatus: {
-      type: DataTypes.ENUM('pendiente', 'pagado', 'cancelado'),
+      type: DataTypes.ENUM('pendiente', 'pagado', 'parcial', 'cancelado'),
       defaultValue: 'pagado'
     },
     status: {
-      type: DataTypes.ENUM('completada', 'cancelada', 'devuelta'),
+      type: DataTypes.ENUM('completada', 'cancelada', 'devuelta', 'anulada'),
       defaultValue: 'completada'
+    },
+    clientName: {
+      type: DataTypes.STRING(200),
+      allowNull: true,
+      comment: 'Nombre del cliente para ventas sin registro'
+    },
+    clientDPI: {
+      type: DataTypes.STRING(13),
+      allowNull: true,
+      comment: 'DPI del cliente'
+    },
+    clientNit: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      comment: 'NIT para facturacion'
+    },
+    sellerDPI: {
+      type: DataTypes.STRING(13),
+      allowNull: true,
+      comment: 'DPI del vendedor'
     },
     notes: {
       type: DataTypes.TEXT,
@@ -87,16 +117,22 @@ module.exports = (sequelize, DataTypes) => {
       { unique: true, fields: ['invoiceNumber'] },
       { fields: ['clientId'] },
       { fields: ['sellerId'] },
-      { fields: ['date'] }
+      { fields: ['invoiceDate'] },
+      { fields: ['invoiceDateTime'] },
+      { fields: ['invoiceTime'] },
+      { fields: ['status'] },
+      { fields: ['paymentMethod'] },
+      { fields: ['paymentStatus'] }
     ],
     hooks: {
       beforeCreate: async (invoice) => {
         if (!invoice.invoiceNumber) {
           const year = new Date().getFullYear();
+          const month = String(new Date().getMonth() + 1).padStart(2, '0');
           const lastInvoice = await sequelize.models.Invoice.findOne({
             where: {
               invoiceNumber: {
-                [sequelize.Sequelize.Op.like]: `FAC-${year}-%`
+                [sequelize.Sequelize.Op.like]: `FAC-${year}${month}-%`
               }
             },
             order: [['id', 'DESC']]
@@ -108,7 +144,7 @@ module.exports = (sequelize, DataTypes) => {
             nextNumber = parseInt(parts[2]) + 1;
           }
 
-          invoice.invoiceNumber = `FAC-${year}-${String(nextNumber).padStart(6, '0')}`;
+          invoice.invoiceNumber = `FAC-${year}${month}-${String(nextNumber).padStart(6, '0')}`;
         }
       }
     }

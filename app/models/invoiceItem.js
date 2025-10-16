@@ -1,5 +1,5 @@
 /**
- * Modelo de Item de Factura con lote asociado
+ * Modelo de Item de Factura con lote
  * Autor: Alexander Echeverria
  * Ubicacion: app/models/InvoiceItem.js
  */
@@ -33,7 +33,8 @@ module.exports = (sequelize, DataTypes) => {
       references: {
         model: 'batches',
         key: 'id'
-      }
+      },
+      comment: 'Lote del que se vendio'
     },
     quantity: {
       type: DataTypes.INTEGER,
@@ -44,11 +45,13 @@ module.exports = (sequelize, DataTypes) => {
     },
     unitPrice: {
       type: DataTypes.DECIMAL(10, 2),
-      allowNull: false
+      allowNull: false,
+      comment: 'Precio unitario de venta'
     },
     unitCost: {
       type: DataTypes.DECIMAL(10, 2),
-      allowNull: false
+      allowNull: false,
+      comment: 'Costo unitario para calcular ganancia'
     },
     discount: {
       type: DataTypes.DECIMAL(10, 2),
@@ -56,11 +59,13 @@ module.exports = (sequelize, DataTypes) => {
     },
     subtotal: {
       type: DataTypes.DECIMAL(12, 2),
-      allowNull: false
+      allowNull: false,
+      comment: 'Subtotal antes de descuento'
     },
-    totalPrice: {
+    total: {
       type: DataTypes.DECIMAL(12, 2),
-      allowNull: false
+      allowNull: false,
+      comment: 'Total despues de descuento'
     }
   }, {
     tableName: 'invoice_items',
