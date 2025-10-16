@@ -1,126 +1,166 @@
 /**
- * Modelo de Recibo vinculado a Invoice
+ * Modelo de Lote con control unico por producto
  * Autor: Alexander Echeverria
- * Ubicacion: app/models/receipt.js
+ * Ubicacion: app/models/batch.js
  */
 
 module.exports = (sequelize, DataTypes) => {
-  const Receipt = sequelize.define('Receipt', {
+  const Batch = sequelize.define('Batch', {
     id: {
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true
     },
-    receiptNumber: {
-      type: DataTypes.STRING(50),
+    batchNumber: {
+      type: DataTypes.STRING(100),
       allowNull: false,
-      unique: true,
-      comment: 'Numero de recibo (REC-2025-00001)'
+      comment: 'Numero de lote del fabricante/proveedor'
     },
-    invoiceId: {
+    productId: {
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: 'invoices',
+        model: 'products',
         key: 'id'
       }
     },
-    clientId: {
+    supplierId: {
       type: DataTypes.INTEGER,
-      allowNull: true,
+      allowNull: false,
       references: {
-        model: 'users',
+        model: 'suppliers',
         key: 'id'
       }
     },
-    paymentId: {
+    manufacturingDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: false,
+      comment: 'Fecha de fabricacion'
+    },
+    expirationDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: false,
+      comment: 'Fecha de vencimiento'
+    },
+    initialQuantity: {
       type: DataTypes.INTEGER,
+      allowNull: false,
+      validate: {
+        min: 0
+      },
+      comment: 'Cantidad inicial al recibir'
+    },
+    currentQuantity: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      validate: {
+        min: 0
+      },
+      comment: 'Cantidad disponible actual'
+    },
+    purchasePrice: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
+      validate: {
+        min: 0
+      },
+      comment: 'Precio de compra unitario'
+    },
+    salePrice: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
+      validate: {
+        min: 0
+      },
+      comment: 'Precio de venta unitario'
+    },
+    location: {
+      type: DataTypes.STRING(100),
       allowNull: true,
-      references: {
-        model: 'payments',
-        key: 'id'
-      }
+      comment: 'Ubicacion fisica en bodega'
     },
-    amount: {
-      type: DataTypes.DECIMAL(12, 2),
-      allowNull: false
+    status: {
+      type: DataTypes.ENUM(
+        'active',
+        'near_expiry',
+        'expired',
+        'depleted',
+        'blocked'
+      ),
+      defaultValue: 'active',
+      comment: 'Estado actual del lote'
     },
-    paymentMethod: {
-      type: DataTypes.ENUM('efectivo', 'tarjeta', 'transferencia', 'paypal', 'stripe'),
-      allowNull: false
+    invoiceNumber: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+      comment: 'Numero de factura de compra'
     },
-    currency: {
-      type: DataTypes.STRING(10),
-      defaultValue: 'GTQ'
-    },
-    issueDate: {
+    receiptDate: {
       type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+      comment: 'Fecha de recepcion del lote'
     },
-    issuedBy: {
-      type: DataTypes.STRING(200),
-      allowNull: false
+    canBeSold: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      comment: 'Si puede ser vendido'
     },
     notes: {
       type: DataTypes.TEXT,
       allowNull: true
-    },
-    pdfUrl: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-      comment: 'URL del PDF en Cloudinary'
-    },
-    status: {
-      type: DataTypes.ENUM('emitido', 'enviado', 'cancelado'),
-      defaultValue: 'emitido'
-    },
-    cancelReason: {
-      type: DataTypes.TEXT,
-      allowNull: true
-    },
-    emailSent: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false
-    },
-    emailSentDate: {
-      type: DataTypes.DATE,
-      allowNull: true
     }
   }, {
-    tableName: 'receipts',
+    tableName: 'batches',
     timestamps: true,
     paranoid: true,
     indexes: [
-      { unique: true, fields: ['receiptNumber'] },
-      { fields: ['invoiceId'] },
-      { fields: ['clientId'] },
-      { fields: ['issueDate'] },
-      { fields: ['status'] }
+      { 
+        unique: true, 
+        fields: ['batchNumber', 'productId'],
+        name: 'unique_batch_per_product'
+      },
+      { fields: ['productId'] },
+      { fields: ['supplierId'] },
+      { fields: ['expirationDate'] },
+      { fields: ['status'] },
+      { fields: ['canBeSold'] },
+      { fields: ['receiptDate'] }
     ],
     hooks: {
-      beforeCreate: async (receipt) => {
-        if (!receipt.receiptNumber) {
-          const year = new Date().getFullYear();
-          const lastReceipt = await sequelize.models.Receipt.findOne({
-            where: {
-              receiptNumber: {
-                [sequelize.Sequelize.Op.like]: `REC-${year}-%`
-              }
-            },
-            order: [['id', 'DESC']]
-          });
+      beforeCreate: async (batch) => {
+        const today = new Date();
+        const expirationDate = new Date(batch.expirationDate);
+        const daysUntilExpiry = Math.floor((expirationDate - today) / (1000 * 60 * 60 * 24));
+        
+        if (daysUntilExpiry < 0) {
+          batch.status = 'expired';
+          batch.canBeSold = false;
+        } else if (daysUntilExpiry <= 30) {
+          batch.status = 'near_expiry';
+        } else {
+          batch.status = 'active';
+        }
+      },
+      beforeUpdate: async (batch) => {
+        const today = new Date();
+        const expirationDate = new Date(batch.expirationDate);
+        const daysUntilExpiry = Math.floor((expirationDate - today) / (1000 * 60 * 60 * 24));
 
-          let nextNumber = 1;
-          if (lastReceipt) {
-            const parts = lastReceipt.receiptNumber.split('-');
-            nextNumber = parseInt(parts[2]) + 1;
-          }
-
-          receipt.receiptNumber = `REC-${year}-${String(nextNumber).padStart(6, '0')}`;
+        if (batch.currentQuantity === 0) {
+          batch.status = 'depleted';
+        } else if (daysUntilExpiry < 0) {
+          batch.status = 'expired';
+          batch.canBeSold = false;
+        } else if (daysUntilExpiry <= 30) {
+          batch.status = 'near_expiry';
+        } else if (batch.currentQuantity > 0 && daysUntilExpiry > 30) {
+          batch.status = 'active';
+          batch.canBeSold = true;
         }
       }
     }
   });
 
-  return Receipt;
+  return Batch;
 };

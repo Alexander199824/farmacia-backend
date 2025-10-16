@@ -1,33 +1,41 @@
-// models/payment.js
-module.exports = (sequelize, Sequelize) => {
-    const Payment = sequelize.define('payments', {
-        id: {
-            type: Sequelize.INTEGER,
-            primaryKey: true,
-            autoIncrement: true
-        },
-        amount: {
-            type: Sequelize.DECIMAL(10, 2),
-            allowNull: false
-        },
-        currency: {
-            type: Sequelize.STRING,
-            defaultValue: 'usd'
-        },
-        status: {
-            type: Sequelize.STRING,
-            allowNull: false
-        },
-        paymentIntentId: {
-            type: Sequelize.STRING,
-            allowNull: false,
-            unique: true
-        },
-        clientSecret: {
-            type: Sequelize.STRING,
-            allowNull: false
-        }
-    });
+/**
+ * Modelo de Payment para Stripe
+ * Autor: Alexander Echeverria
+ * Ubicacion: app/models/payment.js
+ */
 
-    return Payment;
+module.exports = (sequelize, DataTypes) => {
+  const Payment = sequelize.define('Payment', {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true
+    },
+    amount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false
+    },
+    currency: {
+      type: DataTypes.STRING(10),
+      defaultValue: 'gtq'
+    },
+    status: {
+      type: DataTypes.STRING(50),
+      allowNull: false
+    },
+    paymentIntentId: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+      unique: true
+    },
+    clientSecret: {
+      type: DataTypes.STRING(255),
+      allowNull: false
+    }
+  }, {
+    tableName: 'payments',
+    timestamps: true
+  });
+
+  return Payment;
 };
