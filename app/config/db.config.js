@@ -10,7 +10,7 @@ const Sequelize = require('sequelize');
 const sequelize = new Sequelize(env.database, env.username, env.password, {
   host: env.host,
   dialect: env.dialect,
-  port: env.port,
+  port: parseInt(process.env.DB_PORT) || 5432,
   dialectOptions: {
     ssl: {
       require: true,

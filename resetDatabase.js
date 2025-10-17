@@ -3,17 +3,10 @@
  * @file resetDatabase.js
  * @description Script para resetear y poblar la base de datos
  * @location resetDatabase.js
- * 
- * Uso: 
- *   node resetDatabase.js         - Solo resetea tablas
- *   node resetDatabase.js --seed  - Resetea y crea usuarios
  */
 
-// ⬇️⬇️⬇️ CRÍTICO: Esto DEBE ser lo primero ⬇️⬇️⬇️
 require('dotenv').config();
-
 const db = require('./app/config/db.config.js');
-const bcrypt = require('bcrypt');
 
 const shouldSeed = process.argv.includes('--seed');
 
@@ -35,19 +28,14 @@ async function resetDatabase() {
         await db.sequelize.authenticate();
         console.log('✅ Conexión establecida\n');
 
-        // Paso 2: Eliminar tablas
-        console.log('🔄 Paso 1/3: Eliminando tablas existentes...');
-        await db.sequelize.drop();
-        console.log('✅ Tablas eliminadas\n');
-
-        // Paso 3: Recrear tablas
-        console.log('🔄 Paso 2/3: Recreando tablas con nueva estructura...');
+        // Paso 2: Recrear tablas (force: true elimina y recrea)
+        console.log('🔄 Recreando tablas (esto eliminará todos los datos)...');
         await db.sequelize.sync({ force: true });
         console.log('✅ Tablas recreadas\n');
 
-        // Paso 4: Crear usuarios por defecto (si --seed)
+        // Paso 3: Crear usuarios por defecto (si --seed)
         if (shouldSeed) {
-            console.log('🔄 Paso 3/3: Creando usuarios por defecto...');
+            console.log('🔄 Creando usuarios por defecto...\n');
             
             const users = [
                 {
@@ -109,7 +97,7 @@ async function resetDatabase() {
                 console.log(`   ✓ Usuario ${user.role.toUpperCase()} creado (ID: ${user.id})`);
             }
             
-            console.log('✅ Usuarios creados\n');
+            console.log('\n✅ Usuarios creados\n');
         }
 
         // Resumen final
@@ -157,7 +145,8 @@ async function resetDatabase() {
     } catch (error) {
         console.error('\n❌ ERROR AL RESETEAR BASE DE DATOS:');
         console.error(error.message);
-        console.error('\nDetalles:', error);
+        console.error('\n📋 Detalles completos:');
+        console.error(error);
         process.exit(1);
     }
 }
