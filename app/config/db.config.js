@@ -34,12 +34,11 @@ db.sequelize = sequelize;
 // ========== IMPORTAR MODELOS ==========
 db.User = require('../models/user.js')(sequelize, Sequelize);
 db.Supplier = require('../models/Supplier.js')(sequelize, Sequelize);
+db.SupplierPayment = require('../models/SupplierPayment.js')(sequelize, Sequelize);
 db.Product = require('../models/product.js')(sequelize, Sequelize);
 db.Batch = require('../models/batch.js')(sequelize, Sequelize);
 db.Invoice = require('../models/invoice.js')(sequelize, Sequelize);
 db.InvoiceItem = require('../models/invoiceItem.js')(sequelize, Sequelize);
-db.Purchase = require('../models/Purchase.js')(sequelize, Sequelize);
-db.PurchaseDetail = require('../models/PurchaseDetail.js')(sequelize, Sequelize);
 db.InventoryMovement = require('../models/inventoryMovement.js')(sequelize, Sequelize);
 db.AuditLog = require('../models/auditLog.js')(sequelize, Sequelize);
 db.Receipt = require('../models/receipt.js')(sequelize, Sequelize);
@@ -47,6 +46,7 @@ db.Payment = require('../models/payment.js')(sequelize, Sequelize);
 
 // ========== RELACIONES DE PROVEEDORES ==========
 
+// Supplier -> Products
 db.Supplier.hasMany(db.Product, { 
   foreignKey: 'supplierId', 
   as: 'products',
@@ -57,6 +57,7 @@ db.Product.belongsTo(db.Supplier, {
   as: 'supplier' 
 });
 
+// Supplier -> Batches
 db.Supplier.hasMany(db.Batch, { 
   foreignKey: 'supplierId', 
   as: 'batches',
@@ -67,12 +68,13 @@ db.Batch.belongsTo(db.Supplier, {
   as: 'supplier' 
 });
 
-db.Supplier.hasMany(db.Purchase, { 
+// Supplier -> SupplierPayments
+db.Supplier.hasMany(db.SupplierPayment, { 
   foreignKey: 'supplierId', 
-  as: 'purchases',
-  onDelete: 'RESTRICT'
+  as: 'payments',
+  onDelete: 'CASCADE'
 });
-db.Purchase.belongsTo(db.Supplier, { 
+db.SupplierPayment.belongsTo(db.Supplier, { 
   foreignKey: 'supplierId', 
   as: 'supplier' 
 });
@@ -89,8 +91,9 @@ db.Batch.belongsTo(db.Product, {
   as: 'product' 
 });
 
-// ========== RELACIONES DE FACTURAS ==========
+// ========== RELACIONES DE FACTURAS (RECIBOS DE VENTA) ==========
 
+// User (Cliente) -> Invoices
 db.User.hasMany(db.Invoice, { 
   foreignKey: 'clientId', 
   as: 'invoicesAsClient'
@@ -100,6 +103,7 @@ db.Invoice.belongsTo(db.User, {
   as: 'client' 
 });
 
+// User (Vendedor) -> Invoices
 db.User.hasMany(db.Invoice, { 
   foreignKey: 'sellerId', 
   as: 'invoicesAsSeller',
@@ -110,6 +114,7 @@ db.Invoice.belongsTo(db.User, {
   as: 'seller' 
 });
 
+// Invoice -> InvoiceItems
 db.Invoice.hasMany(db.InvoiceItem, { 
   foreignKey: 'invoiceId', 
   as: 'items',
@@ -120,6 +125,7 @@ db.InvoiceItem.belongsTo(db.Invoice, {
   as: 'invoice' 
 });
 
+// Product -> InvoiceItems
 db.Product.hasMany(db.InvoiceItem, { 
   foreignKey: 'productId', 
   as: 'invoiceItems'
@@ -129,6 +135,7 @@ db.InvoiceItem.belongsTo(db.Product, {
   as: 'product' 
 });
 
+// Batch -> InvoiceItems
 db.Batch.hasMany(db.InvoiceItem, { 
   foreignKey: 'batchId', 
   as: 'invoiceItems'
@@ -138,48 +145,9 @@ db.InvoiceItem.belongsTo(db.Batch, {
   as: 'batch' 
 });
 
-// ========== RELACIONES DE COMPRAS ==========
+// ========== RELACIONES DE MOVIMIENTOS DE INVENTARIO ==========
 
-db.User.hasMany(db.Purchase, { 
-  foreignKey: 'userId', 
-  as: 'purchasesMade',
-  onDelete: 'RESTRICT'
-});
-db.Purchase.belongsTo(db.User, { 
-  foreignKey: 'userId', 
-  as: 'buyer' 
-});
-
-db.Purchase.hasMany(db.PurchaseDetail, { 
-  foreignKey: 'purchaseId', 
-  as: 'details',
-  onDelete: 'CASCADE'
-});
-db.PurchaseDetail.belongsTo(db.Purchase, { 
-  foreignKey: 'purchaseId', 
-  as: 'purchase' 
-});
-
-db.Product.hasMany(db.PurchaseDetail, { 
-  foreignKey: 'productId', 
-  as: 'purchaseDetails'
-});
-db.PurchaseDetail.belongsTo(db.Product, { 
-  foreignKey: 'productId', 
-  as: 'product' 
-});
-
-db.Batch.hasMany(db.PurchaseDetail, { 
-  foreignKey: 'batchId', 
-  as: 'purchaseDetails'
-});
-db.PurchaseDetail.belongsTo(db.Batch, { 
-  foreignKey: 'batchId', 
-  as: 'batch' 
-});
-
-// ========== RELACIONES DE MOVIMIENTOS ==========
-
+// Product -> InventoryMovements
 db.Product.hasMany(db.InventoryMovement, { 
   foreignKey: 'productId', 
   as: 'movements',
@@ -190,6 +158,7 @@ db.InventoryMovement.belongsTo(db.Product, {
   as: 'product' 
 });
 
+// Batch -> InventoryMovements
 db.Batch.hasMany(db.InventoryMovement, { 
   foreignKey: 'batchId', 
   as: 'movements'
@@ -199,9 +168,10 @@ db.InventoryMovement.belongsTo(db.Batch, {
   as: 'batch' 
 });
 
+// User (quien realizó el movimiento) -> InventoryMovements
 db.User.hasMany(db.InventoryMovement, { 
   foreignKey: 'userId', 
-  as: 'movements',
+  as: 'movementsCreated',
   onDelete: 'RESTRICT'
 });
 db.InventoryMovement.belongsTo(db.User, { 
@@ -209,8 +179,19 @@ db.InventoryMovement.belongsTo(db.User, {
   as: 'user' 
 });
 
-// ========== RELACIONES DE RECIBOS ==========
+// User (quien aprobó el movimiento) -> InventoryMovements
+db.User.hasMany(db.InventoryMovement, { 
+  foreignKey: 'approvedBy', 
+  as: 'movementsApproved'
+});
+db.InventoryMovement.belongsTo(db.User, { 
+  foreignKey: 'approvedBy', 
+  as: 'approver' 
+});
 
+// ========== RELACIONES DE RECIBOS (COMPROBANTES) ==========
+
+// Invoice -> Receipts
 db.Invoice.hasMany(db.Receipt, { 
   foreignKey: 'invoiceId', 
   as: 'receipts',
@@ -221,6 +202,7 @@ db.Receipt.belongsTo(db.Invoice, {
   as: 'invoice' 
 });
 
+// User (Cliente) -> Receipts
 db.User.hasMany(db.Receipt, { 
   foreignKey: 'clientId', 
   as: 'receipts'
@@ -230,6 +212,7 @@ db.Receipt.belongsTo(db.User, {
   as: 'client' 
 });
 
+// Payment -> Receipts
 db.Payment.hasMany(db.Receipt, { 
   foreignKey: 'paymentId', 
   as: 'receipts'

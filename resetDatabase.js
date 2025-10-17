@@ -1,255 +1,166 @@
 /**
  * @author Alexander Echeverria
  * @file resetDatabase.js
- * @description Script para resetear base de datos (uso independiente)
+ * @description Script para resetear y poblar la base de datos
  * @location resetDatabase.js
  * 
- * Uso:
- * - node resetDatabase.js              # Reset sin datos
- * - node resetDatabase.js --seed       # Reset con datos de prueba
- * - npm run db:reset                   # Usando script npm
+ * Uso: 
+ *   node resetDatabase.js         - Solo resetea tablas
+ *   node resetDatabase.js --seed  - Resetea y crea usuarios
  */
 
-const db = require('./app/config/db.config');
+// ⬇️⬇️⬇️ CRÍTICO: Esto DEBE ser lo primero ⬇️⬇️⬇️
+require('dotenv').config();
+
+const db = require('./app/config/db.config.js');
 const bcrypt = require('bcrypt');
 
-// Verificar argumentos
-const args = process.argv.slice(2);
-const withSeed = args.includes('--seed') || args.includes('-s');
+const shouldSeed = process.argv.includes('--seed');
 
-console.log('╔════════════════════════════════════════════╗');
+console.log('\n╔════════════════════════════════════════════╗');
 console.log('║   RESET DE BASE DE DATOS - FARMACIA        ║');
 console.log('╚════════════════════════════════════════════╝\n');
 
-if (withSeed) {
-    console.log('📦 Modo: RESET CON DATOS DE PRUEBA\n');
+if (shouldSeed) {
+    console.log('📦 Modo: RESET CON USUARIOS POR DEFECTO\n');
 } else {
-    console.log('📦 Modo: RESET SIN DATOS\n');
+    console.log('⚠️  Modo: SOLO RESET (sin crear usuarios)');
+    console.log('💡 Usa: node resetDatabase.js --seed para crear usuarios\n');
 }
 
-// Función principal de reset
 async function resetDatabase() {
     try {
-        // PASO 1: Eliminar todas las tablas
+        // Paso 1: Conectar
+        console.log('🔌 Conectando a la base de datos...');
+        await db.sequelize.authenticate();
+        console.log('✅ Conexión establecida\n');
+
+        // Paso 2: Eliminar tablas
         console.log('🔄 Paso 1/3: Eliminando tablas existentes...');
-        await db.sequelize.sync({ force: true });
+        await db.sequelize.drop();
         console.log('✅ Tablas eliminadas\n');
 
-        // PASO 2: Recrear tablas
+        // Paso 3: Recrear tablas
         console.log('🔄 Paso 2/3: Recreando tablas con nueva estructura...');
-        await db.sequelize.sync();
+        await db.sequelize.sync({ force: true });
         console.log('✅ Tablas recreadas\n');
 
-        // PASO 3: Insertar datos de prueba (si se solicitó)
-        if (withSeed) {
-            console.log('🔄 Paso 3/3: Insertando datos de prueba...');
-            await seedDatabase();
-            console.log('✅ Datos insertados\n');
-        } else {
-            console.log('⏭️  Paso 3/3: Omitiendo datos de prueba\n');
+        // Paso 4: Crear usuarios por defecto (si --seed)
+        if (shouldSeed) {
+            console.log('🔄 Paso 3/3: Creando usuarios por defecto...');
+            
+            const users = [
+                {
+                    email: 'admin@farmacia.com',
+                    password: 'Admin123!',
+                    firstName: 'Administrador',
+                    lastName: 'Sistema',
+                    role: 'admin',
+                    dpi: '1111111111111',
+                    nit: '1111111-1',
+                    phone: '1111-1111',
+                    address: 'Ciudad de Guatemala, Zona 1',
+                    birthDate: '1990-01-01',
+                    isActive: true
+                },
+                {
+                    email: 'vendedor@farmacia.com',
+                    password: 'Vendedor123!',
+                    firstName: 'Juan',
+                    lastName: 'Pérez Vendedor',
+                    role: 'vendedor',
+                    dpi: '2222222222222',
+                    nit: '2222222-2',
+                    phone: '2222-2222',
+                    address: 'Ciudad de Guatemala, Zona 10',
+                    birthDate: '1995-05-15',
+                    isActive: true
+                },
+                {
+                    email: 'bodega@farmacia.com',
+                    password: 'Bodega123!',
+                    firstName: 'Carlos',
+                    lastName: 'López Bodega',
+                    role: 'bodega',
+                    dpi: '3333333333333',
+                    nit: '3333333-3',
+                    phone: '3333-3333',
+                    address: 'Ciudad de Guatemala, Zona 12',
+                    birthDate: '1992-08-20',
+                    isActive: true
+                },
+                {
+                    email: 'cliente@farmacia.com',
+                    password: 'Cliente123!',
+                    firstName: 'María',
+                    lastName: 'García Cliente',
+                    role: 'cliente',
+                    dpi: '9876543210101',
+                    nit: 'CF',
+                    phone: '4444-4444',
+                    address: 'Ciudad de Guatemala, Zona 15',
+                    birthDate: '1988-03-10',
+                    isActive: true
+                }
+            ];
+
+            for (const userData of users) {
+                const user = await db.User.create(userData);
+                console.log(`   ✓ Usuario ${user.role.toUpperCase()} creado (ID: ${user.id})`);
+            }
+            
+            console.log('✅ Usuarios creados\n');
         }
 
-        // Mostrar resumen
+        // Resumen final
         console.log('╔════════════════════════════════════════════╗');
         console.log('║          RESET COMPLETADO ✅               ║');
         console.log('╚════════════════════════════════════════════╝\n');
 
-        const tables = Object.keys(db).filter(key => 
-            key !== 'Sequelize' && key !== 'sequelize'
-        );
-        
+        // Listar tablas creadas
+        const tables = await db.sequelize.getQueryInterface().showAllTables();
         console.log('📋 Tablas creadas:');
         tables.forEach(table => console.log(`   ✓ ${table}`));
         console.log('');
 
-        if (withSeed) {
-            console.log('👤 Credenciales de prueba:');
-            console.log('   Usuario: admin');
-            console.log('   Contraseña: admin123');
-            console.log('   Rol: administrador\n');
+        // Mostrar credenciales si se crearon usuarios
+        if (shouldSeed) {
+            console.log('╔════════════════════════════════════════════╗');
+            console.log('║        👤 CREDENCIALES DE ACCESO          ║');
+            console.log('╚════════════════════════════════════════════╝\n');
+
+            console.log('🔐 ADMINISTRADOR:');
+            console.log('   📧 Email: admin@farmacia.com');
+            console.log('   🔑 Contraseña: Admin123!');
+            console.log('   👤 Rol: admin\n');
+
+            console.log('🔐 VENDEDOR:');
+            console.log('   📧 Email: vendedor@farmacia.com');
+            console.log('   🔑 Contraseña: Vendedor123!');
+            console.log('   👤 Rol: vendedor\n');
+
+            console.log('🔐 BODEGA:');
+            console.log('   📧 Email: bodega@farmacia.com');
+            console.log('   🔑 Contraseña: Bodega123!');
+            console.log('   👤 Rol: bodega\n');
+
+            console.log('🔐 CLIENTE:');
+            console.log('   📧 Email: cliente@farmacia.com');
+            console.log('   🔑 Contraseña: Cliente123!');
+            console.log('   👤 Rol: cliente\n');
         }
+
+        console.log('💡 Ahora puedes iniciar el servidor con: npm start\n');
 
         process.exit(0);
 
     } catch (error) {
         console.error('\n❌ ERROR AL RESETEAR BASE DE DATOS:');
-        console.error(error);
+        console.error(error.message);
+        console.error('\nDetalles:', error);
         process.exit(1);
     }
 }
 
-// Función para insertar datos de prueba
-async function seedDatabase() {
-    try {
-        // 1. Usuario administrador
-        const hashedPassword = await bcrypt.hash('admin123', 12);
-        const adminUser = await db.User.create({
-            username: 'admin',
-            password: hashedPassword,
-            role: 'administrador',
-            userType: 'trabajador',
-            dpi: '1234567890101'
-        });
-        console.log('   ✓ Usuario administrador creado');
-
-        // 2. Usuario vendedor
-        const sellerPassword = await bcrypt.hash('vendedor123', 12);
-        const sellerUser = await db.User.create({
-            username: 'vendedor',
-            password: sellerPassword,
-            role: 'vendedor',
-            userType: 'trabajador',
-            dpi: '2345678901012'
-        });
-        console.log('   ✓ Usuario vendedor creado');
-
-        // 3. Trabajador
-        await db.Worker.create({
-            name: 'Juan Pérez',
-            dpi: '1234567890101',
-            birthDate: '1990-05-15',
-            email: 'juan@farmacia.com',
-            phone: '12345678',
-            address: 'Ciudad de Guatemala',
-            role: 'Administrador',
-            userId: adminUser.id
-        });
-        console.log('   ✓ Trabajador creado');
-
-        // 4. Cliente
-        const client = await db.Client.create({
-            name: 'María López',
-            dpi: '9876543210101',
-            birthDate: '1985-03-20',
-            email: 'maria@cliente.com',
-            phone: '87654321',
-            address: 'Zona 10, Guatemala'
-        });
-        console.log('   ✓ Cliente creado');
-
-        // 5. Productos
-        const productos = [
-            {
-                name: 'Paracetamol 500mg',
-                description: 'Analgésico y antipirético',
-                price: 25.50,
-                stock: 100,
-                supplier: 'Farmacéuticos Unidos'
-            },
-            {
-                name: 'Ibuprofeno 400mg',
-                description: 'Antiinflamatorio',
-                price: 18.00,
-                stock: 80,
-                supplier: 'Distribuidora Médica'
-            },
-            {
-                name: 'Amoxicilina 500mg',
-                description: 'Antibiótico',
-                price: 45.00,
-                stock: 60,
-                supplier: 'Laboratorios SA'
-            }
-        ];
-
-        const productosCreados = [];
-        for (const prod of productos) {
-            const product = await db.Product.create(prod);
-            productosCreados.push(product);
-        }
-        console.log(`   ✓ ${productos.length} productos creados`);
-
-        // 6. Lotes
-        const lotes = [
-            {
-                productId: productosCreados[0].id,
-                batchNumber: 'LOT-2025-001',
-                manufacturingDate: '2025-01-01',
-                expirationDate: '2027-01-01',
-                quantity: 100,
-                initialQuantity: 100,
-                purchasePrice: 20.00,
-                salePrice: 25.50,
-                supplier: 'Farmacéuticos Unidos',
-                location: 'Bodega A',
-                status: 'active'
-            },
-            {
-                productId: productosCreados[1].id,
-                batchNumber: 'LOT-2025-002',
-                manufacturingDate: '2025-02-01',
-                expirationDate: '2025-12-01', // Próximo a vencer
-                quantity: 80,
-                initialQuantity: 80,
-                purchasePrice: 15.00,
-                salePrice: 18.00,
-                supplier: 'Distribuidora Médica',
-                location: 'Bodega A',
-                status: 'active'
-            },
-            {
-                productId: productosCreados[2].id,
-                batchNumber: 'LOT-2024-050',
-                manufacturingDate: '2024-01-01',
-                expirationDate: '2025-10-01', // Por vencer
-                quantity: 60,
-                initialQuantity: 60,
-                purchasePrice: 35.00,
-                salePrice: 45.00,
-                supplier: 'Laboratorios SA',
-                location: 'Bodega B',
-                status: 'near_expiry'
-            }
-        ];
-
-        for (const lote of lotes) {
-            await db.Batch.create(lote);
-        }
-        console.log(`   ✓ ${lotes.length} lotes creados`);
-
-        // 7. Factura de ejemplo
-        const invoice = await db.Invoice.create({
-            clientId: client.id,
-            sellerDPI: '1234567890101',
-            clientDPI: client.dpi,
-            totalAmount: 255.00,
-            paymentMethod: 'cash',
-            date: new Date()
-        });
-        console.log('   ✓ Factura de ejemplo creada');
-
-        // 8. Items de factura
-        await db.InvoiceItem.create({
-            invoiceId: invoice.id,
-            productId: productosCreados[0].id,
-            quantity: 10,
-            unitPrice: 25.50,
-            totalPrice: 255.00
-        });
-        console.log('   ✓ Items de factura creados');
-
-        // 9. Actualizar stock
-        await productosCreados[0].update({ stock: 90 });
-        console.log('   ✓ Stock actualizado');
-
-        // 10. Log de auditoría de ejemplo
-        await db.AuditLog.create({
-            userId: adminUser.id,
-            action: 'CREATE',
-            entity: 'Invoice',
-            entityId: invoice.id,
-            description: 'Factura de prueba creada',
-            severity: 'low',
-            status: 'success'
-        });
-        console.log('   ✓ Log de auditoría creado');
-
-        return true;
-    } catch (error) {
-        console.error('   ❌ Error al insertar datos de prueba:', error.message);
-        throw error;
-    }
-}
-
-// Ejecutar reset
+// Ejecutar
 resetDatabase();

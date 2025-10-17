@@ -1,5 +1,5 @@
 /**
- * Configuracion de variables de entorno con Cloudinary
+ * Configuracion de variables de entorno con Google OAuth completo
  * Autor: Alexander Echeverria
  * Ubicacion: app/config/env.js
  */
@@ -26,8 +26,10 @@ const config = {
   
   googleClientId: process.env.GOOGLE_CLIENT_ID,
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  googleCallbackURL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:5000/api/users/auth/google/callback',
   
   stripeSecretKey: process.env.STRIPE_SECRET_KEY,
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
   
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME,

@@ -1,221 +1,717 @@
 /**
  * @author Alexander Echeverria
  * @file app/controllers/invoice.controller.js
- * @description Controlador de Facturas - Incluye /next-number
+ * @description Controlador de Recibos de Venta con FIFO y trazabilidad
  * @location app/controllers/invoice.controller.js
  * 
  * Funcionalidades:
- * - CRUD completo de facturas
- * - Obtener próximo número de factura
+ * - Crear recibo con asignación automática de lotes (FIFO)
  * - Actualización automática de stock
+ * - Generación de movimientos de inventario
+ * - Cálculo de ganancia por item
+ * - Ventas con y sin cliente registrado
+ * - Reportes y estadísticas
  */
 
 const db = require('../config/db.config');
 const Invoice = db.Invoice;
 const InvoiceItem = db.InvoiceItem;
 const Product = db.Product;
+const Batch = db.Batch;
+const User = db.User;
+const Receipt = db.Receipt;
+const InventoryMovement = db.InventoryMovement;
+const { Op } = db.Sequelize;
 
-// Crear una nueva factura
+// ========== CREAR RECIBO ==========
+
 exports.createInvoice = async (req, res) => {
-  const { clientId, sellerDPI, clientDPI, paymentMethod, items } = req.body;
+    const transaction = await db.sequelize.transaction();
 
-  try {
-    if (!items || items.length === 0) {
-      return res.status(400).json({ message: "La lista de artículos no puede estar vacía" });
-    }
+    try {
+        const {
+            clientId, // Opcional: ID del usuario con role: 'cliente'
+            clientName, // Para ventas sin cliente registrado
+            clientDPI,
+            clientNit,
+            sellerId, // ID del vendedor (usuario autenticado)
+            items, // Array de { productId, quantity, unitPrice, discount? }
+            paymentMethod,
+            discount = 0,
+            tax = 0,
+            notes
+        } = req.body;
 
-    // Validar que cada item tenga productId y unitPrice
-    for (const item of items) {
-      if (!item.productId || !item.unitPrice) {
-        return res.status(400).json({ message: "Cada artículo debe tener 'productId' y 'unitPrice'" });
-      }
-    }
+        // Validaciones básicas
+        if (!items || items.length === 0) {
+            await transaction.rollback();
+            return res.status(400).json({
+                message: "El recibo debe tener al menos un producto"
+            });
+        }
 
-    // Calcular el totalAmount
-    const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+        if (!sellerId) {
+            await transaction.rollback();
+            return res.status(400).json({
+                message: "Se requiere el ID del vendedor"
+            });
+        }
 
-    // Crear la factura con los datos básicos
-    const invoice = await Invoice.create(
-      {
-        clientId,
-        sellerDPI,
-        clientDPI,
-        totalAmount,
-        paymentMethod,
-        date: new Date()
-      },
-      { include: [{ model: InvoiceItem, as: 'items' }] }
-    );
+        // Validar vendedor existe y tiene rol correcto
+        const seller = await User.findByPk(sellerId);
+        if (!seller) {
+            await transaction.rollback();
+            return res.status(404).json({ message: "Vendedor no encontrado" });
+        }
 
-    // Crear los items de la factura y actualizar stock
-    for (const item of items) {
-      await InvoiceItem.create({
-        invoiceId: invoice.id,
-        productId: item.productId,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        totalPrice: item.quantity * item.unitPrice,
-      });
+        if (!['admin', 'vendedor'].includes(seller.role)) {
+            await transaction.rollback();
+            return res.status(403).json({
+                message: "El usuario no tiene permisos para vender"
+            });
+        }
 
-      // Actualizar stock del producto
-      const product = await Product.findByPk(item.productId);
-      if (product) {
-        await product.update({
-          stock: product.stock - item.quantity
+        // Si hay clientId, validar que existe y es cliente
+        let client = null;
+        if (clientId) {
+            client = await User.findByPk(clientId);
+            if (!client) {
+                await transaction.rollback();
+                return res.status(404).json({ message: "Cliente no encontrado" });
+            }
+        }
+
+        // Procesar items y asignar lotes (FIFO)
+        const processedItems = [];
+        let subtotal = 0;
+
+        for (const item of items) {
+            const { productId, quantity, unitPrice, discount: itemDiscount = 0 } = item;
+
+            if (!productId || !quantity || quantity <= 0) {
+                await transaction.rollback();
+                return res.status(400).json({
+                    message: "Cada item debe tener productId y quantity válidos"
+                });
+            }
+
+            // Obtener producto
+            const product = await Product.findByPk(productId, { transaction });
+            if (!product) {
+                await transaction.rollback();
+                return res.status(404).json({
+                    message: `Producto con ID ${productId} no encontrado`
+                });
+            }
+
+            if (!product.isActive) {
+                await transaction.rollback();
+                return res.status(400).json({
+                    message: `El producto "${product.name}" está inactivo`
+                });
+            }
+
+            // Verificar stock disponible
+            if (product.stock < quantity) {
+                await transaction.rollback();
+                return res.status(400).json({
+                    message: `Stock insuficiente para "${product.name}". Disponible: ${product.stock}, Solicitado: ${quantity}`
+                });
+            }
+
+            // Obtener lotes disponibles ordenados por FIFO (primero vence, primero sale)
+            const availableBatches = await Batch.findAll({
+                where: {
+                    productId,
+                    currentQuantity: { [Op.gt]: 0 },
+                    canBeSold: true,
+                    status: { [Op.in]: ['active', 'near_expiry'] },
+                    expirationDate: { [Op.gte]: new Date() }
+                },
+                order: [
+                    ['expirationDate', 'ASC'],
+                    ['receiptDate', 'ASC']
+                ],
+                transaction
+            });
+
+            if (availableBatches.length === 0) {
+                await transaction.rollback();
+                return res.status(400).json({
+                    message: `No hay lotes disponibles para vender "${product.name}"`
+                });
+            }
+
+            // Asignar cantidad de cada lote (puede usar múltiples lotes)
+            let remainingQuantity = quantity;
+            const batchAssignments = [];
+
+            for (const batch of availableBatches) {
+                if (remainingQuantity <= 0) break;
+
+                const quantityFromThisBatch = Math.min(remainingQuantity, batch.currentQuantity);
+
+                batchAssignments.push({
+                    batchId: batch.id,
+                    quantity: quantityFromThisBatch,
+                    unitCost: parseFloat(batch.purchasePrice),
+                    unitPrice: unitPrice || parseFloat(batch.salePrice)
+                });
+
+                remainingQuantity -= quantityFromThisBatch;
+            }
+
+            if (remainingQuantity > 0) {
+                await transaction.rollback();
+                return res.status(400).json({
+                    message: `No hay suficiente stock en lotes para "${product.name}". Faltante: ${remainingQuantity}`
+                });
+            }
+
+            // Agregar cada asignación de lote como un item separado
+            for (const assignment of batchAssignments) {
+                const itemSubtotal = assignment.quantity * assignment.unitPrice;
+                const itemTotal = itemSubtotal - itemDiscount;
+                
+                processedItems.push({
+                    productId,
+                    batchId: assignment.batchId,
+                    quantity: assignment.quantity,
+                    unitPrice: assignment.unitPrice,
+                    unitCost: assignment.unitCost,
+                    discount: itemDiscount,
+                    subtotal: itemSubtotal,
+                    total: itemTotal
+                });
+
+                subtotal += itemSubtotal;
+            }
+        }
+
+        // Calcular totales del recibo
+        const invoiceSubtotal = subtotal;
+        const invoiceTotal = invoiceSubtotal - discount + tax;
+
+        // Crear el recibo (el número se genera automáticamente en el hook)
+        const invoice = await Invoice.create({
+            clientId: clientId || null,
+            sellerId,
+            clientName: clientName || (client ? `${client.firstName} ${client.lastName}` : 'Consumidor Final'),
+            clientDPI,
+            clientNit,
+            sellerDPI: seller.dpi,
+            subtotal: invoiceSubtotal,
+            discount,
+            tax,
+            total: invoiceTotal,
+            paymentMethod,
+            paymentStatus: ['efectivo', 'tarjeta', 'transferencia'].includes(paymentMethod) ? 'pagado' : 'pendiente',
+            status: 'completada',
+            notes
+        }, { transaction });
+
+        // Crear items del recibo
+        for (const item of processedItems) {
+            await InvoiceItem.create({
+                invoiceId: invoice.id,
+                ...item
+            }, { transaction });
+
+            // Actualizar stock del lote
+            const batch = await Batch.findByPk(item.batchId, { transaction });
+            await batch.decrement('currentQuantity', { by: item.quantity, transaction });
+
+            // Si el lote queda en 0, marcar como agotado
+            if (batch.currentQuantity - item.quantity === 0) {
+                await batch.update({ status: 'depleted' }, { transaction });
+            }
+
+            // Actualizar stock del producto
+            const product = await Product.findByPk(item.productId, { transaction });
+            await product.decrement('stock', { by: item.quantity, transaction });
+
+            // Crear movimiento de inventario
+            await InventoryMovement.create({
+                productId: item.productId,
+                batchId: item.batchId,
+                movementType: 'venta',
+                quantity: -item.quantity, // Negativo porque es salida
+                previousStock: product.stock,
+                newStock: product.stock - item.quantity,
+                unitCost: item.unitCost,
+                totalValue: item.unitCost * item.quantity,
+                referenceType: 'sale',
+                referenceId: invoice.id,
+                userId: sellerId,
+                notes: `Venta - Recibo ${invoice.invoiceNumber}`
+            }, { transaction });
+        }
+
+        // Generar comprobante de pago automáticamente
+        const receipt = await Receipt.create({
+            invoiceId: invoice.id,
+            clientId: clientId || null,
+            amount: invoiceTotal,
+            paymentMethod,
+            currency: 'GTQ',
+            issuedBy: `${seller.firstName} ${seller.lastName}`,
+            notes: `Comprobante de Recibo ${invoice.invoiceNumber}`
+        }, { transaction });
+
+        await transaction.commit();
+
+        // Recargar recibo con todas las relaciones
+        const fullInvoice = await Invoice.findByPk(invoice.id, {
+            include: [
+                {
+                    model: InvoiceItem,
+                    as: 'items',
+                    include: [
+                        {
+                            model: Product,
+                            as: 'product',
+                            attributes: ['id', 'name', 'sku']
+                        },
+                        {
+                            model: Batch,
+                            as: 'batch',
+                            attributes: ['id', 'batchNumber', 'expirationDate']
+                        }
+                    ]
+                },
+                {
+                    model: User,
+                    as: 'client',
+                    attributes: ['id', 'firstName', 'lastName', 'email'],
+                    required: false
+                },
+                {
+                    model: User,
+                    as: 'seller',
+                    attributes: ['id', 'firstName', 'lastName']
+                }
+            ]
         });
-      }
-    }
 
-    res.status(201).json({ message: "Factura creada con éxito", invoice });
-  } catch (error) {
-    console.error("Error al crear factura:", error);
-    res.status(500).json({ message: "Error al crear factura", error: error.message });
-  }
+        res.status(201).json({
+            message: "Recibo creado exitosamente",
+            invoice: fullInvoice,
+            receipt: {
+                id: receipt.id,
+                receiptNumber: receipt.receiptNumber
+            }
+        });
+
+    } catch (error) {
+        await transaction.rollback();
+        console.error('Error al crear recibo:', error);
+        res.status(500).json({
+            message: "Error al crear recibo",
+            error: error.message
+        });
+    }
 };
 
-// Obtener todas las facturas
+// ========== OBTENER RECIBOS ==========
+
+// Obtener todos los recibos con filtros
 exports.getAllInvoices = async (req, res) => {
-  try {
-    const invoices = await Invoice.findAll({
-      include: [
-        { 
-          model: InvoiceItem, 
-          as: 'items',
-          include: [{
-            model: Product,
-            as: 'product',
-            attributes: ['id', 'name', 'price']
-          }]
-        },
-        {
-          model: db.Client,
-          as: 'client',
-          attributes: ['id', 'name', 'dpi'],
-          required: false
+    try {
+        const {
+            clientId,
+            sellerId,
+            status,
+            paymentStatus,
+            paymentMethod,
+            startDate,
+            endDate,
+            page = 1,
+            limit = 50
+        } = req.query;
+
+        const where = {};
+
+        if (clientId) where.clientId = clientId;
+        if (sellerId) where.sellerId = sellerId;
+        if (status) where.status = status;
+        if (paymentStatus) where.paymentStatus = paymentStatus;
+        if (paymentMethod) where.paymentMethod = paymentMethod;
+
+        if (startDate && endDate) {
+            where.invoiceDate = {
+                [Op.between]: [new Date(startDate), new Date(endDate)]
+            };
         }
-      ],
-      order: [['date', 'DESC']]
-    });
-    res.status(200).json(invoices);
-  } catch (error) {
-    console.error("Error al obtener facturas:", error);
-    res.status(500).json({ message: "Error al obtener facturas", error: error.message });
-  }
+
+        const offset = (page - 1) * limit;
+
+        const { count, rows: invoices } = await Invoice.findAndCountAll({
+            where,
+            include: [
+                {
+                    model: User,
+                    as: 'client',
+                    attributes: ['id', 'firstName', 'lastName', 'email'],
+                    required: false
+                },
+                {
+                    model: User,
+                    as: 'seller',
+                    attributes: ['id', 'firstName', 'lastName']
+                },
+                {
+                    model: InvoiceItem,
+                    as: 'items',
+                    include: [
+                        {
+                            model: Product,
+                            as: 'product',
+                            attributes: ['id', 'name', 'sku']
+                        }
+                    ]
+                }
+            ],
+            order: [['invoiceDateTime', 'DESC']],
+            limit: parseInt(limit),
+            offset: parseInt(offset)
+        });
+
+        res.status(200).json({
+            total: count,
+            page: parseInt(page),
+            totalPages: Math.ceil(count / limit),
+            invoices
+        });
+    } catch (error) {
+        res.status(500).json({
+            message: "Error al obtener recibos",
+            error: error.message
+        });
+    }
 };
 
-// Obtener una factura por ID
+// Obtener recibo por ID
 exports.getInvoiceById = async (req, res) => {
-  try {
-    const invoice = await Invoice.findByPk(req.params.id, {
-      include: [
-        { 
-          model: InvoiceItem, 
-          as: 'items',
-          include: [{
-            model: Product,
-            as: 'product',
-            attributes: ['id', 'name', 'price', 'description']
-          }]
-        },
-        {
-          model: db.Client,
-          as: 'client',
-          attributes: ['id', 'name', 'dpi', 'email', 'phone'],
-          required: false
+    try {
+        const { id } = req.params;
+
+        const invoice = await Invoice.findByPk(id, {
+            include: [
+                {
+                    model: InvoiceItem,
+                    as: 'items',
+                    include: [
+                        {
+                            model: Product,
+                            as: 'product',
+                            attributes: ['id', 'name', 'sku', 'description']
+                        },
+                        {
+                            model: Batch,
+                            as: 'batch',
+                            attributes: ['id', 'batchNumber', 'expirationDate', 'manufacturingDate']
+                        }
+                    ]
+                },
+                {
+                    model: User,
+                    as: 'client',
+                    attributes: ['id', 'firstName', 'lastName', 'email', 'phone', 'address'],
+                    required: false
+                },
+                {
+                    model: User,
+                    as: 'seller',
+                    attributes: ['id', 'firstName', 'lastName', 'email']
+                },
+                {
+                    model: Receipt,
+                    as: 'receipts',
+                    attributes: ['id', 'receiptNumber', 'amount', 'issueDate']
+                }
+            ]
+        });
+
+        if (!invoice) {
+            return res.status(404).json({ message: "Recibo no encontrado" });
         }
-      ]
-    });
-    if (invoice) {
-      res.status(200).json(invoice);
-    } else {
-      res.status(404).json({ message: "Factura no encontrada" });
+
+        res.status(200).json(invoice);
+    } catch (error) {
+        res.status(500).json({
+            message: "Error al obtener recibo",
+            error: error.message
+        });
     }
-  } catch (error) {
-    console.error("Error al obtener factura:", error);
-    res.status(500).json({ message: "Error al obtener factura", error: error.message });
-  }
 };
 
-// Actualizar una factura
-exports.updateInvoice = async (req, res) => {
-  const { clientId, sellerDPI, clientDPI, paymentMethod, items } = req.body;
+// Obtener recibo por número
+exports.getInvoiceByNumber = async (req, res) => {
+    try {
+        const { invoiceNumber } = req.params;
 
-  try {
-    const invoice = await Invoice.findByPk(req.params.id);
-    if (!invoice) return res.status(404).json({ message: "Factura no encontrada" });
+        const invoice = await Invoice.findOne({
+            where: { invoiceNumber },
+            include: [
+                {
+                    model: InvoiceItem,
+                    as: 'items',
+                    include: [
+                        {
+                            model: Product,
+                            as: 'product'
+                        },
+                        {
+                            model: Batch,
+                            as: 'batch'
+                        }
+                    ]
+                },
+                {
+                    model: User,
+                    as: 'client',
+                    required: false
+                },
+                {
+                    model: User,
+                    as: 'seller'
+                }
+            ]
+        });
 
-    if (!items || items.length === 0) {
-      return res.status(400).json({ message: "La lista de artículos no puede estar vacía" });
+        if (!invoice) {
+            return res.status(404).json({ message: "Recibo no encontrado" });
+        }
+
+        res.status(200).json(invoice);
+    } catch (error) {
+        res.status(500).json({
+            message: "Error al obtener recibo",
+            error: error.message
+        });
     }
-
-    for (const item of items) {
-      if (!item.productId || !item.unitPrice) {
-        return res.status(400).json({ message: "Cada artículo debe tener 'productId' y 'unitPrice'" });
-      }
-    }
-
-    const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-
-    await invoice.update({
-      clientId,
-      sellerDPI,
-      clientDPI,
-      totalAmount,
-      paymentMethod
-    });
-
-    // Eliminar los items existentes y agregar los nuevos
-    await InvoiceItem.destroy({ where: { invoiceId: invoice.id } });
-    for (const item of items) {
-      await InvoiceItem.create({
-        invoiceId: invoice.id,
-        productId: item.productId,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        totalPrice: item.quantity * item.unitPrice,
-      });
-    }
-
-    res.status(200).json({ message: "Factura actualizada con éxito", invoice });
-  } catch (error) {
-    console.error("Error al actualizar factura:", error);
-    res.status(500).json({ message: "Error al actualizar factura", error: error.message });
-  }
 };
 
-// Eliminar una factura
-exports.deleteInvoice = async (req, res) => {
-  try {
-    const invoice = await Invoice.findByPk(req.params.id);
-    if (!invoice) return res.status(404).json({ message: "Factura no encontrada" });
-
-    await InvoiceItem.destroy({ where: { invoiceId: invoice.id } });
-    await invoice.destroy();
-    
-    res.status(200).json({ message: "Factura eliminada con éxito" });
-  } catch (error) {
-    console.error("Error al eliminar factura:", error);
-    res.status(500).json({ message: "Error al eliminar factura", error: error.message });
-  }
-};
-
-// Obtener el próximo número de factura
+// Obtener próximo número de recibo
 exports.getNextInvoiceNumber = async (req, res) => {
-  try {
-    console.log("Fetching last invoice to determine next invoice number.");
-    const lastInvoice = await Invoice.findOne({ 
-      order: [['id', 'DESC']] 
-    });
-    
-    const nextInvoiceNumber = lastInvoice ? lastInvoice.id + 1 : 1;
-    
-    res.status(200).json({ nextInvoiceNumber });
-    console.log("Next invoice number:", nextInvoiceNumber);
-  } catch (error) {
-    console.error("Error al obtener el número de factura:", error.message);
-    res.status(500).json({ 
-      message: "Error al obtener el número de factura", 
-      error: error.message 
-    });
-  }
+    try {
+        const year = new Date().getFullYear();
+        const month = String(new Date().getMonth() + 1).padStart(2, '0');
+
+        const lastInvoice = await Invoice.findOne({
+            where: {
+                invoiceNumber: {
+                    [Op.like]: `FAC-${year}${month}-%`
+                }
+            },
+            order: [['id', 'DESC']]
+        });
+
+        let nextNumber = 1;
+        if (lastInvoice) {
+            const parts = lastInvoice.invoiceNumber.split('-');
+            nextNumber = parseInt(parts[2]) + 1;
+        }
+
+        const nextInvoiceNumber = `FAC-${year}${month}-${String(nextNumber).padStart(6, '0')}`;
+
+        res.status(200).json({
+            nextInvoiceNumber,
+            preview: true
+        });
+    } catch (error) {
+        res.status(500).json({
+            message: "Error al obtener número de recibo",
+            error: error.message
+        });
+    }
+};
+
+// ========== ANULAR RECIBO ==========
+
+exports.cancelInvoice = async (req, res) => {
+    const transaction = await db.sequelize.transaction();
+
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+
+        if (!reason) {
+            await transaction.rollback();
+            return res.status(400).json({
+                message: "Se requiere una razón para anular el recibo"
+            });
+        }
+
+        const invoice = await Invoice.findByPk(id, {
+            include: [
+                {
+                    model: InvoiceItem,
+                    as: 'items',
+                    include: [{ model: Batch, as: 'batch' }]
+                }
+            ],
+            transaction
+        });
+
+        if (!invoice) {
+            await transaction.rollback();
+            return res.status(404).json({ message: "Recibo no encontrado" });
+        }
+
+        if (invoice.status === 'cancelada' || invoice.status === 'anulada') {
+            await transaction.rollback();
+            return res.status(400).json({
+                message: "El recibo ya está cancelado"
+            });
+        }
+
+        // Verificar que sea del mismo día (opcional, según política)
+        const today = new Date().toISOString().split('T')[0];
+        const invoiceDate = new Date(invoice.invoiceDate).toISOString().split('T')[0];
+
+        if (invoiceDate !== today) {
+            // Advertencia pero permitir continuar si es admin
+            console.warn('⚠️ Anulando recibo de fecha diferente al día actual');
+        }
+
+        // Revertir stock de todos los items
+        for (const item of invoice.items) {
+            // Devolver al lote
+            await item.batch.increment('currentQuantity', {
+                by: item.quantity,
+                transaction
+            });
+
+            // Actualizar estado del lote si estaba agotado
+            if (item.batch.status === 'depleted') {
+                await item.batch.update({
+                    status: 'active',
+                    canBeSold: true
+                }, { transaction });
+            }
+
+            // Devolver al producto
+            const product = await Product.findByPk(item.productId, { transaction });
+            await product.increment('stock', {
+                by: item.quantity,
+                transaction
+            });
+
+            // Crear movimiento de inventario de reversa
+            await InventoryMovement.create({
+                productId: item.productId,
+                batchId: item.batchId,
+                movementType: 'ajuste_entrada',
+                quantity: item.quantity, // Positivo porque es entrada
+                previousStock: product.stock,
+                newStock: product.stock + item.quantity,
+                referenceType: 'adjustment',
+                referenceId: invoice.id,
+                userId: req.user.id,
+                notes: `Anulación de Recibo ${invoice.invoiceNumber} - Razón: ${reason}`
+            }, { transaction });
+        }
+
+        // Anular recibo
+        await invoice.update({
+            status: 'anulada',
+            notes: `${invoice.notes || ''}\n[ANULADA] ${new Date().toISOString()}: ${reason}`
+        }, { transaction });
+
+        // Anular comprobantes asociados
+        await Receipt.update(
+            {
+                status: 'cancelado',
+                cancelReason: `Recibo anulado: ${reason}`
+            },
+            {
+                where: { invoiceId: invoice.id },
+                transaction
+            }
+        );
+
+        await transaction.commit();
+
+        res.status(200).json({
+            message: "Recibo anulado exitosamente",
+            invoice: {
+                id: invoice.id,
+                invoiceNumber: invoice.invoiceNumber,
+                status: 'anulada'
+            }
+        });
+
+    } catch (error) {
+        await transaction.rollback();
+        console.error('Error al anular recibo:', error);
+        res.status(500).json({
+            message: "Error al anular recibo",
+            error: error.message
+        });
+    }
+};
+
+// ========== ESTADÍSTICAS ==========
+
+// Obtener estadísticas de recibos
+exports.getInvoiceStats = async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+        const dateFilter = {};
+
+        if (startDate && endDate) {
+            dateFilter.invoiceDate = {
+                [Op.between]: [new Date(startDate), new Date(endDate)]
+            };
+        }
+
+        const stats = {
+            total: await Invoice.count({ where: dateFilter }),
+            
+            byStatus: await Invoice.findAll({
+                where: dateFilter,
+                attributes: [
+                    'status',
+                    [db.Sequelize.fn('COUNT', db.Sequelize.col('id')), 'count'],
+                    [db.Sequelize.fn('SUM', db.Sequelize.col('total')), 'totalAmount']
+                ],
+                group: ['status']
+            }),
+
+            byPaymentMethod: await Invoice.findAll({
+                where: dateFilter,
+                attributes: [
+                    'paymentMethod',
+                    [db.Sequelize.fn('COUNT', db.Sequelize.col('id')), 'count'],
+                    [db.Sequelize.fn('SUM', db.Sequelize.col('total')), 'totalAmount']
+                ],
+                group: ['paymentMethod']
+            }),
+
+            totalRevenue: await Invoice.sum('total', {
+                where: {
+                    status: { [Op.ne]: 'anulada' },
+                    ...dateFilter
+                }
+            }) || 0,
+
+            averageTicket: await Invoice.findOne({
+                where: {
+                    status: { [Op.ne]: 'anulada' },
+                    ...dateFilter
+                },
+                attributes: [
+                    [db.Sequelize.fn('AVG', db.Sequelize.col('total')), 'average']
+                ]
+            })
+        };
+
+        res.status(200).json(stats);
+    } catch (error) {
+        res.status(500).json({
+            message: "Error al obtener estadísticas",
+            error: error.message
+        });
+    }
 };

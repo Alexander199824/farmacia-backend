@@ -28,7 +28,7 @@ const auditMiddleware = (action, entity, severity = 'low') => {
         // Sobrescribir res.json para capturar la respuesta
         res.json = function(data) {
             // Crear log de auditoría
-            createAuditLog(req, action, entity, data, severity);
+            createAuditLog(req, res, action, entity, data, severity);
             
             // Llamar al método original
             return originalJson.call(this, data);
@@ -41,7 +41,7 @@ const auditMiddleware = (action, entity, severity = 'low') => {
 /**
  * Crea un registro de auditoría
  */
-const createAuditLog = async (req, action, entity, responseData, severity) => {
+const createAuditLog = async (req, res, action, entity, responseData, severity) => {
     try {
         const auditData = {
             userId: req.user?.id || null,
@@ -83,23 +83,26 @@ const createAuditLog = async (req, action, entity, responseData, severity) => {
  * Genera una descripción legible de la acción
  */
 const generateDescription = (action, entity, user, params) => {
-    const username = user?.username || 'Usuario desconocido';
+    const username = user?.username || user?.email || 'Usuario desconocido';
     const actionText = {
         'CREATE': 'creó',
         'UPDATE': 'actualizó',
         'DELETE': 'eliminó',
         'READ': 'consultó',
         'LOGIN': 'inició sesión',
-        'LOGOUT': 'cerró sesión'
+        'LOGOUT': 'cerró sesión',
+        'CANCEL': 'anuló'
     };
 
     const entityTranslation = {
         'Product': 'producto',
         'User': 'usuario',
-        'Invoice': 'factura',
-        'Client': 'cliente',
+        'Invoice': 'recibo de venta',
+        'Receipt': 'comprobante',
         'Batch': 'lote',
-        'Payment': 'pago'
+        'Payment': 'pago',
+        'Supplier': 'proveedor',
+        'InventoryMovement': 'movimiento de inventario'
     };
 
     const actionDesc = actionText[action] || action.toLowerCase();
@@ -126,7 +129,7 @@ const highAudit = (action, entity) => {
 /**
  * Registrar login exitoso
  */
-const auditLogin = async (userId, username, ipAddress, userAgent, success = true) => {
+const auditLogin = async (userId, userEmail, ipAddress, userAgent, success = true) => {
     try {
         await AuditLog.create({
             userId,
@@ -136,8 +139,8 @@ const auditLogin = async (userId, username, ipAddress, userAgent, success = true
             ipAddress,
             userAgent,
             description: success 
-                ? `${username} inició sesión exitosamente`
-                : `Intento fallido de inicio de sesión para ${username}`,
+                ? `${userEmail} inició sesión exitosamente`
+                : `Intento fallido de inicio de sesión para ${userEmail}`,
             severity: success ? 'low' : 'high',
             status: success ? 'success' : 'failure'
         });
@@ -149,7 +152,7 @@ const auditLogin = async (userId, username, ipAddress, userAgent, success = true
 /**
  * Registrar logout
  */
-const auditLogout = async (userId, username, ipAddress) => {
+const auditLogout = async (userId, userEmail, ipAddress) => {
     try {
         await AuditLog.create({
             userId,
@@ -157,7 +160,7 @@ const auditLogout = async (userId, username, ipAddress) => {
             entity: 'User',
             entityId: userId,
             ipAddress,
-            description: `${username} cerró sesión`,
+            description: `${userEmail} cerró sesión`,
             severity: 'low',
             status: 'success'
         });
