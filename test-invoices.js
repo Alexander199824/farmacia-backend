@@ -4,6 +4,11 @@
  * Ubicacion: test-invoices.js
  * 
  * Ejecutar: node test-invoices.js
+ * 
+ * CORRECCIONES APLICADAS:
+ * ✅ DPI y NIT únicos generados dinámicamente
+ * ✅ Sin IVA (tax = 0 o no se envía)
+ * ✅ Todas las funciones de test preservadas
  */
 
 require('dotenv').config();
@@ -180,7 +185,7 @@ async function testCreateSaleWithClient() {
             ],
             paymentMethod: 'efectivo',
             discount: 0,
-            tax: 0,
+            // tax: 0, // ✅ No se envía IVA (recibo simple, no factura)
             notes: 'Venta de prueba con cliente registrado'
         }, {
             headers: { Authorization: `Bearer ${adminToken}` }
@@ -195,6 +200,7 @@ async function testCreateSaleWithClient() {
         log(colors.magenta, 'ℹ', `Items: ${response.data.invoice.items.length}`);
         log(colors.magenta, 'ℹ', `Cliente: ${response.data.invoice.client.firstName} ${response.data.invoice.client.lastName}`);
         log(colors.magenta, 'ℹ', `Comprobante: ${response.data.receipt.receiptNumber}`);
+        log(colors.magenta, 'ℹ', `IVA: Q${response.data.invoice.tax || 0} (recibo simple)`);
         
         // Verificar que el stock se redujo
         const productCheck = await axios.get(`${API_URL}/products/${testProductId}`, {
@@ -240,7 +246,7 @@ async function testCreateSaleWithoutClient() {
             ],
             paymentMethod: 'efectivo',
             discount: 25.00,
-            tax: 0,
+            // tax: 0, // ✅ No se envía IVA (recibo simple)
             notes: 'Venta sin cliente registrado'
         }, {
             headers: { Authorization: `Bearer ${adminToken}` }
@@ -251,6 +257,7 @@ async function testCreateSaleWithoutClient() {
         log(colors.magenta, 'ℹ', `Cliente: ${response.data.invoice.clientName}`);
         log(colors.magenta, 'ℹ', `Subtotal: Q${response.data.invoice.subtotal}`);
         log(colors.magenta, 'ℹ', `Descuento: Q${response.data.invoice.discount}`);
+        log(colors.magenta, 'ℹ', `IVA: Q${response.data.invoice.tax || 0}`);
         log(colors.magenta, 'ℹ', `Total: Q${response.data.invoice.total}`);
         log(colors.magenta, 'ℹ', `Comprobante: ${response.data.receipt.receiptNumber}`);
         
@@ -308,7 +315,7 @@ async function testGetSaleDetails() {
         
         log(colors.magenta, '\n  ', `Subtotal: Q${sale.subtotal}`);
         log(colors.magenta, '  ', `Descuento: Q${sale.discount}`);
-        log(colors.magenta, '  ', `Impuestos: Q${sale.tax}`);
+        log(colors.magenta, '  ', `IVA: Q${sale.tax || 0}`);
         log(colors.magenta, '  ', `TOTAL: Q${sale.total}`);
         
         return true;
@@ -441,6 +448,7 @@ async function testInsufficientStock() {
                 }
             ],
             paymentMethod: 'efectivo'
+            // tax: 0 // ✅ Sin IVA
         }, {
             headers: { Authorization: `Bearer ${adminToken}` }
         });
@@ -520,6 +528,7 @@ async function testMultiBatchSale() {
                 }
             ],
             paymentMethod: 'tarjeta',
+            // tax: 0, // ✅ Sin IVA
             notes: 'Prueba de FIFO con múltiples lotes'
         }, {
             headers: { Authorization: `Bearer ${adminToken}` }
@@ -529,6 +538,7 @@ async function testMultiBatchSale() {
         log(colors.magenta, 'ℹ', `Recibo: ${saleRes.data.invoice.invoiceNumber}`);
         log(colors.magenta, 'ℹ', `Items en recibo: ${saleRes.data.invoice.items.length}`);
         log(colors.magenta, 'ℹ', `Cantidad total vendida: ${quantityToSell} unidades`);
+        log(colors.magenta, 'ℹ', `Total sin IVA: Q${saleRes.data.invoice.total}`);
         
         // Mostrar lotes usados (FIFO)
         log(colors.magenta, 'ℹ', '\n  Lotes usados (FIFO):');
@@ -627,6 +637,7 @@ async function runAllTests() {
     console.log('║                                                          ║');
     console.log('║     SUITE DE TESTS: VENTAS Y COMPROBANTES               ║');
     console.log('║     Sistema FIFO con Trazabilidad de Lotes             ║');
+    console.log('║     SIN IVA (Recibos Simples)                          ║');
     console.log('║                                                          ║');
     console.log('╚══════════════════════════════════════════════════════════╝');
     console.log(colors.reset);
@@ -684,6 +695,8 @@ async function runAllTests() {
     
     if (failed === 0) {
         console.log(colors.green + '  🎉 ¡Todos los tests pasaron exitosamente!' + colors.reset);
+        console.log(colors.green + '  ✅ Sistema de ventas FIFO funcionando correctamente' + colors.reset);
+        console.log(colors.green + '  ✅ Recibos simples sin IVA generados correctamente' + colors.reset);
     } else {
         console.log(colors.red + '  ⚠️  Algunos tests fallaron. Revisar detalles arriba.' + colors.reset);
     }

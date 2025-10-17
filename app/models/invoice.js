@@ -1,16 +1,10 @@
 /**
- * Modelo de Recibo de Venta (Invoice) - VERSIÓN CON DEBUG
+ * Modelo de Recibo de Venta (Invoice) - SIN IVA OBLIGATORIO
  * Autor: Alexander Echeverria
  * Ubicacion: app/models/invoice.js
  */
 
 module.exports = (sequelize, DataTypes) => {
-  // ✅ CRÍTICO: Acceder a Op desde sequelize ANTES de definir el modelo
-  const { Op } = sequelize.Sequelize;
-  
-  console.log('🔧 [INVOICE MODEL] Cargando modelo Invoice...');
-  console.log('🔧 [INVOICE MODEL] Op disponible:', typeof Op);
-
   const Invoice = sequelize.define('Invoice', {
     id: {
       type: DataTypes.INTEGER,
@@ -68,12 +62,13 @@ module.exports = (sequelize, DataTypes) => {
     },
     discount: {
       type: DataTypes.DECIMAL(12, 2),
-      defaultValue: 0.00
+      defaultValue: 0.00,
+      comment: 'Descuento aplicado'
     },
     tax: {
       type: DataTypes.DECIMAL(12, 2),
       defaultValue: 0.00,
-      comment: 'IVA u otros impuestos'
+      comment: 'IVA solo para facturas fiscales (opcional)'
     },
     total: {
       type: DataTypes.DECIMAL(12, 2),
@@ -104,7 +99,7 @@ module.exports = (sequelize, DataTypes) => {
     clientNit: {
       type: DataTypes.STRING(20),
       allowNull: true,
-      comment: 'NIT para facturacion'
+      comment: 'NIT para facturacion fiscal (opcional)'
     },
     sellerDPI: {
       type: DataTypes.STRING(13),
@@ -132,67 +127,61 @@ module.exports = (sequelize, DataTypes) => {
     ],
     hooks: {
       beforeCreate: async (invoice, options) => {
-        console.log('🔧 [INVOICE HOOK] beforeCreate ejecutándose...');
-        console.log('🔧 [INVOICE HOOK] invoiceNumber actual:', invoice.invoiceNumber);
-        
-        const transaction = options.transaction;
-        
-        if (!invoice.invoiceNumber) {
-          console.log('🔧 [INVOICE HOOK] Generando número de recibo...');
+        try {
+          console.log('🔧 [INVOICE HOOK] Iniciando generación de invoiceNumber...');
           
-          const year = new Date().getFullYear();
-          const month = String(new Date().getMonth() + 1).padStart(2, '0');
+          // Si ya tiene invoiceNumber, no hacer nada
+          if (invoice.invoiceNumber) {
+            console.log('🔧 [INVOICE HOOK] invoiceNumber ya existe:', invoice.invoiceNumber);
+            return;
+          }
+
+          const transaction = options.transaction;
+          const { Op } = sequelize.Sequelize;
+          
+          // Generar prefijo con año y mes
+          const now = new Date();
+          const year = now.getFullYear();
+          const month = String(now.getMonth() + 1).padStart(2, '0');
           const prefix = `REC-${year}${month}-`;
           
-          console.log('🔧 [INVOICE HOOK] Prefijo:', prefix);
-          console.log('🔧 [INVOICE HOOK] Op disponible en hook:', typeof Op);
-          
-          try {
-            // Verificar que Op está definido
-            if (!Op || typeof Op.like === 'undefined') {
-              console.error('❌ [INVOICE HOOK] ERROR: Op no está definido correctamente');
-              throw new Error('Op no disponible en el hook');
-            }
-            
-            console.log('🔧 [INVOICE HOOK] Buscando último recibo...');
-            
-            const lastInvoice = await invoice.constructor.findOne({
-              where: {
-                invoiceNumber: {
-                  [Op.like]: `${prefix}%`
-                }
-              },
-              order: [['id', 'DESC']],
-              transaction,
-              lock: transaction ? transaction.LOCK.UPDATE : false
-            });
+          console.log('🔧 [INVOICE HOOK] Prefijo generado:', prefix);
 
-            console.log('🔧 [INVOICE HOOK] Último recibo encontrado:', lastInvoice?.invoiceNumber || 'ninguno');
-
-            let nextNumber = 1;
-            if (lastInvoice && lastInvoice.invoiceNumber) {
-              const parts = lastInvoice.invoiceNumber.split('-');
-              if (parts.length === 3) {
-                nextNumber = parseInt(parts[2]) + 1;
+          // Buscar último recibo del mes
+          const lastInvoice = await sequelize.models.Invoice.findOne({
+            where: {
+              invoiceNumber: {
+                [Op.like]: `${prefix}%`
               }
-            }
+            },
+            order: [['id', 'DESC']],
+            transaction,
+            lock: transaction ? transaction.LOCK.UPDATE : undefined
+          });
 
-            invoice.invoiceNumber = `${prefix}${String(nextNumber).padStart(6, '0')}`;
-            
-            console.log('✅ [INVOICE HOOK] Número de recibo generado:', invoice.invoiceNumber);
-          } catch (error) {
-            console.error('❌ [INVOICE HOOK] Error generando número de recibo:', error);
-            console.error('❌ [INVOICE HOOK] Error stack:', error.stack);
-            throw error;
+          console.log('🔧 [INVOICE HOOK] Último recibo encontrado:', lastInvoice?.invoiceNumber || 'ninguno');
+
+          // Calcular siguiente número
+          let nextNumber = 1;
+          if (lastInvoice && lastInvoice.invoiceNumber) {
+            const parts = lastInvoice.invoiceNumber.split('-');
+            if (parts.length === 3) {
+              nextNumber = parseInt(parts[2], 10) + 1;
+            }
           }
-        } else {
-          console.log('🔧 [INVOICE HOOK] invoiceNumber ya existe:', invoice.invoiceNumber);
+
+          // Generar número completo
+          invoice.invoiceNumber = `${prefix}${String(nextNumber).padStart(6, '0')}`;
+          
+          console.log('✅ [INVOICE HOOK] Número generado:', invoice.invoiceNumber);
+          
+        } catch (error) {
+          console.error('❌ [INVOICE HOOK] Error generando número de recibo:', error);
+          throw new Error(`Error generando número de recibo: ${error.message}`);
         }
       }
     }
   });
-  
-  console.log('✅ [INVOICE MODEL] Modelo Invoice cargado correctamente');
 
   return Invoice;
 };

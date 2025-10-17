@@ -12,6 +12,7 @@
  * - Ventas con y sin cliente registrado
  * - Generación automática de comprobantes de pago
  * - Reportes y estadísticas
+ * - SIN IVA por defecto (solo recibos simples, no facturas fiscales)
  */
 
 const db = require('../config/db.config');
@@ -39,7 +40,7 @@ exports.createInvoice = async (req, res) => {
             items, // Array de { productId, quantity, unitPrice, discount? }
             paymentMethod,
             discount = 0,
-            tax = 0,
+            tax = 0, // Por defecto 0 - solo si es factura fiscal
             notes
         } = req.body;
 
@@ -189,9 +190,9 @@ exports.createInvoice = async (req, res) => {
             }
         }
 
-        // Calcular totales del recibo
+        // Calcular totales del recibo (SIN IVA por defecto)
         const invoiceSubtotal = subtotal;
-        const invoiceTotal = invoiceSubtotal - discount + tax;
+        const invoiceTotal = invoiceSubtotal - discount + parseFloat(tax || 0);
 
         // Crear el recibo de venta (el número se genera automáticamente en el hook)
         const invoice = await Invoice.create({
@@ -203,7 +204,7 @@ exports.createInvoice = async (req, res) => {
             sellerDPI: seller.dpi,
             subtotal: invoiceSubtotal,
             discount,
-            tax,
+            tax: parseFloat(tax || 0), // Por defecto 0
             total: invoiceTotal,
             paymentMethod,
             paymentStatus: ['efectivo', 'tarjeta', 'transferencia'].includes(paymentMethod) ? 'pagado' : 'pendiente',
