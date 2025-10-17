@@ -1,7 +1,10 @@
 /**
- * Modelo de Recibo - SOLUCIÓN DEFINITIVA
+ * Modelo de Comprobante de Pago
  * Autor: Alexander Echeverria
  * Ubicacion: app/models/receipt.js
+ * 
+ * IMPORTANTE: Este es el COMPROBANTE DE PAGO que se genera al realizar una venta
+ * Se vincula con Invoice (Recibo de Venta)
  */
 
 module.exports = (sequelize, DataTypes) => {
@@ -18,7 +21,7 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING(50),
       allowNull: false,
       unique: true,
-      comment: 'Numero de recibo (REC-2025-00001)'
+      comment: 'Numero de comprobante (COMP-YYYY-000001)'
     },
     invoiceId: {
       type: DataTypes.INTEGER,
@@ -26,7 +29,8 @@ module.exports = (sequelize, DataTypes) => {
       references: {
         model: 'invoices',
         key: 'id'
-      }
+      },
+      comment: 'Recibo de venta asociado'
     },
     clientId: {
       type: DataTypes.INTEGER,
@@ -46,7 +50,8 @@ module.exports = (sequelize, DataTypes) => {
     },
     amount: {
       type: DataTypes.DECIMAL(12, 2),
-      allowNull: false
+      allowNull: false,
+      comment: 'Monto del comprobante'
     },
     paymentMethod: {
       type: DataTypes.ENUM('efectivo', 'tarjeta', 'transferencia', 'paypal', 'stripe'),
@@ -58,11 +63,13 @@ module.exports = (sequelize, DataTypes) => {
     },
     issueDate: {
       type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW
+      defaultValue: DataTypes.NOW,
+      comment: 'Fecha de emision del comprobante'
     },
     issuedBy: {
       type: DataTypes.STRING(200),
-      allowNull: false
+      allowNull: false,
+      comment: 'Nombre del emisor del comprobante'
     },
     notes: {
       type: DataTypes.TEXT,
@@ -106,10 +113,10 @@ module.exports = (sequelize, DataTypes) => {
         
         if (!receipt.receiptNumber) {
           const year = new Date().getFullYear();
-          const prefix = `REC-${year}-`;
+          const prefix = `COMP-${year}-`;
           
+          // ✅ Op ya está disponible desde el scope superior
           try {
-            // ✅ Ahora Op está disponible desde el scope superior
             const lastReceipt = await receipt.constructor.findOne({
               where: {
                 receiptNumber: {
@@ -131,9 +138,9 @@ module.exports = (sequelize, DataTypes) => {
 
             receipt.receiptNumber = `${prefix}${String(nextNumber).padStart(6, '0')}`;
             
-            console.log('✅ Número de recibo generado:', receipt.receiptNumber);
+            console.log('✅ Número de comprobante generado:', receipt.receiptNumber);
           } catch (error) {
-            console.error('❌ Error generando número de recibo:', error);
+            console.error('❌ Error generando número de comprobante:', error);
             throw error;
           }
         }

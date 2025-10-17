@@ -6,7 +6,7 @@
  * 
  * Funcionalidades:
  * - Generación automática de comprobantes
- * - Numeración correlativa
+ * - Numeración correlativa (COMP-YYYY-NNNNNN)
  * - Vinculación con recibos de venta y pagos
  * - Envío por email
  * - Generación de PDF
@@ -35,10 +35,10 @@ exports.createReceipt = async (req, res) => {
             notes
         } = req.body;
 
-        // Validar que el recibo de venta existe
+        // Validar que la venta existe
         const invoice = await Invoice.findByPk(invoiceId);
         if (!invoice) {
-            return res.status(404).json({ message: "Recibo de venta no encontrado" });
+            return res.status(404).json({ message: "Venta no encontrada" });
         }
 
         // Validar que el cliente existe (si se proporciona)
@@ -93,12 +93,12 @@ exports.createReceipt = async (req, res) => {
         });
 
         res.status(201).json({
-            message: "Comprobante creado exitosamente",
+            message: "Comprobante de pago creado exitosamente",
             receipt: fullReceipt
         });
     } catch (error) {
         res.status(500).json({
-            message: "Error al crear comprobante",
+            message: "Error al crear comprobante de pago",
             error: error.message
         });
     }
@@ -303,7 +303,7 @@ exports.getReceiptsByClient = async (req, res) => {
     }
 };
 
-// Obtener comprobantes por recibo de venta
+// Obtener comprobantes por venta
 exports.getReceiptsByInvoice = async (req, res) => {
     try {
         const { invoiceId } = req.params;
@@ -334,7 +334,7 @@ exports.getReceiptsByInvoice = async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({
-            message: "Error al obtener comprobantes del recibo de venta",
+            message: "Error al obtener comprobantes de la venta",
             error: error.message
         });
     }

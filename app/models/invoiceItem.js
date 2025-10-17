@@ -1,7 +1,9 @@
 /**
- * Modelo de Item de Factura con lote
+ * Modelo de Item de Recibo de Venta
  * Autor: Alexander Echeverria
- * Ubicacion: app/models/InvoiceItem.js
+ * Ubicacion: app/models/invoiceItem.js
+ * 
+ * Cada item representa un producto vendido con su lote específico (FIFO)
  */
 
 module.exports = (sequelize, DataTypes) => {
@@ -17,7 +19,8 @@ module.exports = (sequelize, DataTypes) => {
       references: {
         model: 'invoices',
         key: 'id'
-      }
+      },
+      comment: 'Recibo de venta al que pertenece'
     },
     productId: {
       type: DataTypes.INTEGER,
@@ -34,19 +37,20 @@ module.exports = (sequelize, DataTypes) => {
         model: 'batches',
         key: 'id'
       },
-      comment: 'Lote del que se vendio'
+      comment: 'Lote del que se vendio (FIFO)'
     },
     quantity: {
       type: DataTypes.INTEGER,
       allowNull: false,
       validate: {
         min: 1
-      }
+      },
+      comment: 'Cantidad vendida de este lote'
     },
     unitPrice: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
-      comment: 'Precio unitario de venta'
+      comment: 'Precio unitario de venta al cliente'
     },
     unitCost: {
       type: DataTypes.DECIMAL(10, 2),
@@ -55,17 +59,18 @@ module.exports = (sequelize, DataTypes) => {
     },
     discount: {
       type: DataTypes.DECIMAL(10, 2),
-      defaultValue: 0.00
+      defaultValue: 0.00,
+      comment: 'Descuento aplicado a este item'
     },
     subtotal: {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: false,
-      comment: 'Subtotal antes de descuento'
+      comment: 'Subtotal antes de descuento (quantity * unitPrice)'
     },
     total: {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: false,
-      comment: 'Total despues de descuento'
+      comment: 'Total despues de descuento (subtotal - discount)'
     }
   }, {
     tableName: 'invoice_items',

@@ -1,15 +1,16 @@
 /**
  * @author Alexander Echeverria
  * @file app/controllers/invoice.controller.js
- * @description Controlador de Recibos de Venta con FIFO y trazabilidad
+ * @description Controlador de Ventas (Recibos de Venta) con FIFO y trazabilidad
  * @location app/controllers/invoice.controller.js
  * 
  * Funcionalidades:
- * - Crear recibo con asignación automática de lotes (FIFO)
+ * - Crear venta con asignación automática de lotes (FIFO)
  * - Actualización automática de stock
  * - Generación de movimientos de inventario
  * - Cálculo de ganancia por item
  * - Ventas con y sin cliente registrado
+ * - Generación automática de comprobantes de pago
  * - Reportes y estadísticas
  */
 
@@ -23,7 +24,7 @@ const Receipt = db.Receipt;
 const InventoryMovement = db.InventoryMovement;
 const { Op } = db.Sequelize;
 
-// ========== CREAR RECIBO ==========
+// ========== CREAR VENTA (RECIBO) ==========
 
 exports.createInvoice = async (req, res) => {
     const transaction = await db.sequelize.transaction();
@@ -46,7 +47,7 @@ exports.createInvoice = async (req, res) => {
         if (!items || items.length === 0) {
             await transaction.rollback();
             return res.status(400).json({
-                message: "El recibo debe tener al menos un producto"
+                message: "La venta debe tener al menos un producto"
             });
         }
 
@@ -192,7 +193,7 @@ exports.createInvoice = async (req, res) => {
         const invoiceSubtotal = subtotal;
         const invoiceTotal = invoiceSubtotal - discount + tax;
 
-        // Crear el recibo (el número se genera automáticamente en el hook)
+        // Crear el recibo de venta (el número se genera automáticamente en el hook)
         const invoice = await Invoice.create({
             clientId: clientId || null,
             sellerId,
@@ -255,7 +256,7 @@ exports.createInvoice = async (req, res) => {
             paymentMethod,
             currency: 'GTQ',
             issuedBy: `${seller.firstName} ${seller.lastName}`,
-            notes: `Comprobante de Recibo ${invoice.invoiceNumber}`
+            notes: `Comprobante de Venta ${invoice.invoiceNumber}`
         }, { transaction });
 
         await transaction.commit();
@@ -294,7 +295,7 @@ exports.createInvoice = async (req, res) => {
         });
 
         res.status(201).json({
-            message: "Recibo creado exitosamente",
+            message: "Venta registrada exitosamente",
             invoice: fullInvoice,
             receipt: {
                 id: receipt.id,
@@ -304,17 +305,17 @@ exports.createInvoice = async (req, res) => {
 
     } catch (error) {
         await transaction.rollback();
-        console.error('Error al crear recibo:', error);
+        console.error('Error al registrar venta:', error);
         res.status(500).json({
-            message: "Error al crear recibo",
+            message: "Error al registrar venta",
             error: error.message
         });
     }
 };
 
-// ========== OBTENER RECIBOS ==========
+// ========== OBTENER VENTAS ==========
 
-// Obtener todos los recibos con filtros
+// Obtener todas las ventas con filtros
 exports.getAllInvoices = async (req, res) => {
     try {
         const {
@@ -384,13 +385,13 @@ exports.getAllInvoices = async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({
-            message: "Error al obtener recibos",
+            message: "Error al obtener ventas",
             error: error.message
         });
     }
 };
 
-// Obtener recibo por ID
+// Obtener venta por ID
 exports.getInvoiceById = async (req, res) => {
     try {
         const { id } = req.params;
@@ -433,19 +434,19 @@ exports.getInvoiceById = async (req, res) => {
         });
 
         if (!invoice) {
-            return res.status(404).json({ message: "Recibo no encontrado" });
+            return res.status(404).json({ message: "Venta no encontrada" });
         }
 
         res.status(200).json(invoice);
     } catch (error) {
         res.status(500).json({
-            message: "Error al obtener recibo",
+            message: "Error al obtener venta",
             error: error.message
         });
     }
 };
 
-// Obtener recibo por número
+// Obtener venta por número
 exports.getInvoiceByNumber = async (req, res) => {
     try {
         const { invoiceNumber } = req.params;
@@ -480,13 +481,13 @@ exports.getInvoiceByNumber = async (req, res) => {
         });
 
         if (!invoice) {
-            return res.status(404).json({ message: "Recibo no encontrado" });
+            return res.status(404).json({ message: "Venta no encontrada" });
         }
 
         res.status(200).json(invoice);
     } catch (error) {
         res.status(500).json({
-            message: "Error al obtener recibo",
+            message: "Error al obtener venta",
             error: error.message
         });
     }
@@ -501,7 +502,7 @@ exports.getNextInvoiceNumber = async (req, res) => {
         const lastInvoice = await Invoice.findOne({
             where: {
                 invoiceNumber: {
-                    [Op.like]: `FAC-${year}${month}-%`
+                    [Op.like]: `REC-${year}${month}-%`
                 }
             },
             order: [['id', 'DESC']]
@@ -513,7 +514,7 @@ exports.getNextInvoiceNumber = async (req, res) => {
             nextNumber = parseInt(parts[2]) + 1;
         }
 
-        const nextInvoiceNumber = `FAC-${year}${month}-${String(nextNumber).padStart(6, '0')}`;
+        const nextInvoiceNumber = `REC-${year}${month}-${String(nextNumber).padStart(6, '0')}`;
 
         res.status(200).json({
             nextInvoiceNumber,
@@ -527,7 +528,7 @@ exports.getNextInvoiceNumber = async (req, res) => {
     }
 };
 
-// ========== ANULAR RECIBO ==========
+// ========== ANULAR VENTA ==========
 
 exports.cancelInvoice = async (req, res) => {
     const transaction = await db.sequelize.transaction();
@@ -539,7 +540,7 @@ exports.cancelInvoice = async (req, res) => {
         if (!reason) {
             await transaction.rollback();
             return res.status(400).json({
-                message: "Se requiere una razón para anular el recibo"
+                message: "Se requiere una razón para anular la venta"
             });
         }
 
@@ -556,13 +557,13 @@ exports.cancelInvoice = async (req, res) => {
 
         if (!invoice) {
             await transaction.rollback();
-            return res.status(404).json({ message: "Recibo no encontrado" });
+            return res.status(404).json({ message: "Venta no encontrada" });
         }
 
         if (invoice.status === 'cancelada' || invoice.status === 'anulada') {
             await transaction.rollback();
             return res.status(400).json({
-                message: "El recibo ya está cancelado"
+                message: "La venta ya está cancelada"
             });
         }
 
@@ -572,7 +573,7 @@ exports.cancelInvoice = async (req, res) => {
 
         if (invoiceDate !== today) {
             // Advertencia pero permitir continuar si es admin
-            console.warn('⚠️ Anulando recibo de fecha diferente al día actual');
+            console.warn('⚠️ Anulando venta de fecha diferente al día actual');
         }
 
         // Revertir stock de todos los items
@@ -609,7 +610,7 @@ exports.cancelInvoice = async (req, res) => {
                 referenceType: 'adjustment',
                 referenceId: invoice.id,
                 userId: req.user.id,
-                notes: `Anulación de Recibo ${invoice.invoiceNumber} - Razón: ${reason}`
+                notes: `Anulación de Venta ${invoice.invoiceNumber} - Razón: ${reason}`
             }, { transaction });
         }
 
@@ -623,7 +624,7 @@ exports.cancelInvoice = async (req, res) => {
         await Receipt.update(
             {
                 status: 'cancelado',
-                cancelReason: `Recibo anulado: ${reason}`
+                cancelReason: `Venta anulada: ${reason}`
             },
             {
                 where: { invoiceId: invoice.id },
@@ -634,7 +635,7 @@ exports.cancelInvoice = async (req, res) => {
         await transaction.commit();
 
         res.status(200).json({
-            message: "Recibo anulado exitosamente",
+            message: "Venta anulada exitosamente",
             invoice: {
                 id: invoice.id,
                 invoiceNumber: invoice.invoiceNumber,
@@ -644,9 +645,9 @@ exports.cancelInvoice = async (req, res) => {
 
     } catch (error) {
         await transaction.rollback();
-        console.error('Error al anular recibo:', error);
+        console.error('Error al anular venta:', error);
         res.status(500).json({
-            message: "Error al anular recibo",
+            message: "Error al anular venta",
             error: error.message
         });
     }
@@ -654,7 +655,7 @@ exports.cancelInvoice = async (req, res) => {
 
 // ========== ESTADÍSTICAS ==========
 
-// Obtener estadísticas de recibos
+// Obtener estadísticas de ventas
 exports.getInvoiceStats = async (req, res) => {
     try {
         const { startDate, endDate } = req.query;

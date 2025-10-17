@@ -1,10 +1,13 @@
 /**
- * Modelo de Compra CORREGIDO
+ * Modelo de Compra a Proveedores
  * Autor: Alexander Echeverria
  * Ubicacion: app/models/Purchase.js
  */
 
 module.exports = (sequelize, DataTypes) => {
+  // ✅ CRÍTICO: Acceder a Op desde sequelize ANTES de definir el modelo
+  const { Op } = sequelize.Sequelize;
+
   const Purchase = sequelize.define('Purchase', {
     id: {
       type: DataTypes.INTEGER,
@@ -14,7 +17,8 @@ module.exports = (sequelize, DataTypes) => {
     purchaseNumber: {
       type: DataTypes.STRING(50),
       allowNull: false,
-      unique: true
+      unique: true,
+      comment: 'Numero de compra (COM-YYYYMM-000001)'
     },
     supplierId: {
       type: DataTypes.INTEGER,
@@ -30,7 +34,8 @@ module.exports = (sequelize, DataTypes) => {
       references: {
         model: 'users',
         key: 'id'
-      }
+      },
+      comment: 'Usuario que registra la compra'
     },
     purchaseDate: {
       type: DataTypes.DATEONLY,
@@ -68,7 +73,8 @@ module.exports = (sequelize, DataTypes) => {
     },
     supplierInvoiceNumber: {
       type: DataTypes.STRING(100),
-      allowNull: true
+      allowNull: true,
+      comment: 'Numero de factura del proveedor'
     },
     notes: {
       type: DataTypes.TEXT,
@@ -93,11 +99,9 @@ module.exports = (sequelize, DataTypes) => {
           const month = String(new Date().getMonth() + 1).padStart(2, '0');
           const prefix = `COM-${year}${month}-`;
           
-          // ✅ CORRECCIÓN: Acceder a Op correctamente
-          const { Op } = require('sequelize');
-          
+          // ✅ Op ya está disponible desde el scope superior
           try {
-            const lastPurchase = await Purchase.findOne({
+            const lastPurchase = await purchase.constructor.findOne({
               where: {
                 purchaseNumber: {
                   [Op.like]: `${prefix}%`
