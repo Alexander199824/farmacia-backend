@@ -582,16 +582,20 @@ exports.getProductStats = async (req, res) => {
             inactive: await Product.count({ where: { isActive: false } }),
             withStock: await Product.count({ where: { stock: { [Op.gt]: 0 } } }),
             outOfStock: await Product.count({ where: { stock: 0 } }),
+            
+            // ⬇️ CORREGIDO: Usar sequelize.where() en lugar de col() directo
             lowStock: await Product.count({
-                where: {
-                    stock: {
+                where: db.Sequelize.where(
+                    db.Sequelize.col('stock'),
+                    {
                         [Op.and]: [
                             { [Op.gt]: 0 },
                             { [Op.lte]: db.Sequelize.col('minStock') }
                         ]
                     }
-                }
+                )
             }),
+            
             requiresPrescription: await Product.count({ where: { requiresPrescription: true } }),
             
             byCategory: await Product.findAll({

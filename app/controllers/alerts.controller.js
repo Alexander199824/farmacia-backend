@@ -237,7 +237,8 @@ async function getPendingApprovalsAlerts() {
             {
                 model: db.User,
                 as: 'user',
-                attributes: ['id', 'username']
+                // ⬇️ CORREGIDO: Usar firstName y lastName en lugar de username
+                attributes: ['id', 'firstName', 'lastName', 'email']
             }
         ],
         order: [['createdAt', 'ASC']]
@@ -257,7 +258,9 @@ async function getPendingApprovalsAlerts() {
             quantity: m.quantity,
             requestedBy: {
                 id: m.user.id,
-                username: m.user.username
+                // ⬇️ CORREGIDO: Concatenar firstName y lastName
+                name: `${m.user.firstName} ${m.user.lastName}`,
+                email: m.user.email
             },
             requestDate: m.createdAt,
             message: `Movimiento de ${m.movementType} pendiente de aprobación`

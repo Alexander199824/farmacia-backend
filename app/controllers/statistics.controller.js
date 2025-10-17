@@ -65,21 +65,18 @@ exports.getDashboard = async (req, res) => {
 
         // Productos con stock bajo (menos del stock mínimo)
         const lowStockProducts = await Product.count({
-            where: {
-                stock: {
-                    [Op.lte]: db.Sequelize.col('minStock')
-                },
-                isActive: true
-            }
-        });
-
-        // Productos agotados
-        const outOfStockProducts = await Product.count({
-            where: {
-                stock: 0,
-                isActive: true
-            }
-        });
+     where: {
+        [Op.and]: [
+        db.Sequelize.where(
+                        db.Sequelize.col('stock'),
+                        Op.lte,
+                        db.Sequelize.col('minStock')
+                        ),
+                        { stock: { [Op.gt]: 0 } },
+                        { isActive: true }
+                    ]
+                }
+            });
 
         // Productos próximos a vencer (30 días)
         const futureDate = new Date();
