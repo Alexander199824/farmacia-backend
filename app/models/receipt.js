@@ -98,37 +98,36 @@ module.exports = (sequelize, DataTypes) => {
       { fields: ['status'] }
     ],
     hooks: {
-      beforeCreate: async (receipt, options) => {
-        // ✅ CRÍTICO: Usar Receipt directamente
-        const transaction = options.transaction;
-        
-        if (!receipt.receiptNumber) {
-          const year = new Date().getFullYear();
-          
-          // ✅ CORRECCIÓN: Usar Receipt directamente
-          const lastReceipt = await Receipt.findOne({
-            where: {
-              receiptNumber: {
-                [sequelize.Sequelize.Op.like]: `REC-${year}-%`
-              }
-            },
-            order: [['id', 'DESC']],
-            transaction,
-            lock: transaction ? transaction.LOCK.UPDATE : false
-          });
-
-          let nextNumber = 1;
-          if (lastReceipt) {
-            const parts = lastReceipt.receiptNumber.split('-');
-            nextNumber = parseInt(parts[2]) + 1;
+  beforeCreate: async (receipt, options) => {
+    const transaction = options.transaction;
+    
+    if (!receipt.receiptNumber) {
+      const year = new Date().getFullYear();
+      
+      // ✅ CORRECCIÓN: Usar receipt.constructor
+      const lastReceipt = await receipt.constructor.findOne({
+        where: {
+          receiptNumber: {
+            [sequelize.Sequelize.Op.like]: `REC-${year}-%`
           }
+        },
+        order: [['id', 'DESC']],
+        transaction,
+        lock: transaction ? transaction.LOCK.UPDATE : false
+      });
 
-          receipt.receiptNumber = `REC-${year}-${String(nextNumber).padStart(6, '0')}`;
-          
-          console.log('✅ Número de recibo generado:', receipt.receiptNumber);
-        }
+      let nextNumber = 1;
+      if (lastReceipt) {
+        const parts = lastReceipt.receiptNumber.split('-');
+        nextNumber = parseInt(parts[2]) + 1;
       }
+
+      receipt.receiptNumber = `REC-${year}-${String(nextNumber).padStart(6, '0')}`;
+      
+      console.log('✅ Número de recibo generado:', receipt.receiptNumber);
     }
+  }
+}
   });
 
   return Receipt;

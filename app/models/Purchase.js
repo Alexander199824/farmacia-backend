@@ -85,38 +85,37 @@ module.exports = (sequelize, DataTypes) => {
       { fields: ['status'] }
     ],
     hooks: {
-      beforeCreate: async (purchase, options) => {
-        // ✅ CRÍTICO: Usar Purchase directamente
-        const transaction = options.transaction;
-        
-        if (!purchase.purchaseNumber) {
-          const year = new Date().getFullYear();
-          const month = String(new Date().getMonth() + 1).padStart(2, '0');
-          
-          // ✅ CORRECCIÓN: Usar Purchase directamente
-          const lastPurchase = await Purchase.findOne({
-            where: {
-              purchaseNumber: {
-                [sequelize.Sequelize.Op.like]: `COM-${year}${month}-%`
-              }
-            },
-            order: [['id', 'DESC']],
-            transaction,
-            lock: transaction ? transaction.LOCK.UPDATE : false
-          });
-
-          let nextNumber = 1;
-          if (lastPurchase) {
-            const parts = lastPurchase.purchaseNumber.split('-');
-            nextNumber = parseInt(parts[2]) + 1;
+  beforeCreate: async (purchase, options) => {
+    const transaction = options.transaction;
+    
+    if (!purchase.purchaseNumber) {
+      const year = new Date().getFullYear();
+      const month = String(new Date().getMonth() + 1).padStart(2, '0');
+      
+      // ✅ CORRECCIÓN: Usar purchase.constructor
+      const lastPurchase = await purchase.constructor.findOne({
+        where: {
+          purchaseNumber: {
+            [sequelize.Sequelize.Op.like]: `COM-${year}${month}-%`
           }
+        },
+        order: [['id', 'DESC']],
+        transaction,
+        lock: transaction ? transaction.LOCK.UPDATE : false
+      });
 
-          purchase.purchaseNumber = `COM-${year}${month}-${String(nextNumber).padStart(6, '0')}`;
-          
-          console.log('✅ Número de compra generado:', purchase.purchaseNumber);
-        }
+      let nextNumber = 1;
+      if (lastPurchase) {
+        const parts = lastPurchase.purchaseNumber.split('-');
+        nextNumber = parseInt(parts[2]) + 1;
       }
+
+      purchase.purchaseNumber = `COM-${year}${month}-${String(nextNumber).padStart(6, '0')}`;
+      
+      console.log('✅ Número de compra generado:', purchase.purchaseNumber);
     }
+  }
+}
   });
 
   return Purchase;
