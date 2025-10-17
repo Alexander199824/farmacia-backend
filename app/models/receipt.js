@@ -3,14 +3,10 @@
  * Autor: Alexander Echeverria
  * Ubicacion: app/models/receipt.js
  * 
- * IMPORTANTE: Este es el COMPROBANTE DE PAGO que se genera al realizar una venta
- * Se vincula con Invoice (Recibo de Venta)
+ * CORRECCIÓN: Hook beforeValidate para generar receiptNumber
  */
 
 module.exports = (sequelize, DataTypes) => {
-  // ✅ CRÍTICO: Acceder a Op desde sequelize ANTES de definir el modelo
-  const { Op } = sequelize.Sequelize;
-
   const Receipt = sequelize.define('Receipt', {
     id: {
       type: DataTypes.INTEGER,
@@ -108,41 +104,58 @@ module.exports = (sequelize, DataTypes) => {
       { fields: ['status'] }
     ],
     hooks: {
-      beforeCreate: async (receipt, options) => {
-        const transaction = options.transaction;
+      beforeValidate: async (receipt, options) => {
+        // ✅ CAMBIO CRÍTICO: Mover generación a beforeValidate
         
-        if (!receipt.receiptNumber) {
+        if (receipt.receiptNumber) {
+          // Ya tiene número, no hacer nada
+          return;
+        }
+
+        try {
+          console.log('🔧 [RECEIPT] Generando receiptNumber...');
+          
+          const transaction = options.transaction;
+          
+          // Generar prefijo con año
           const year = new Date().getFullYear();
           const prefix = `COMP-${year}-`;
           
-          // ✅ Op ya está disponible desde el scope superior
-          try {
-            const lastReceipt = await receipt.constructor.findOne({
-              where: {
-                receiptNumber: {
-                  [Op.like]: `${prefix}%`
-                }
-              },
-              order: [['id', 'DESC']],
-              transaction,
-              lock: transaction ? transaction.LOCK.UPDATE : false
-            });
+          console.log('🔧 [RECEIPT] Prefijo:', prefix);
 
-            let nextNumber = 1;
-            if (lastReceipt && lastReceipt.receiptNumber) {
-              const parts = lastReceipt.receiptNumber.split('-');
-              if (parts.length === 3) {
-                nextNumber = parseInt(parts[2]) + 1;
+          // Buscar último comprobante del año
+          const { Op } = sequelize.Sequelize;
+          
+          const lastReceipt = await Receipt.findOne({
+            where: {
+              receiptNumber: {
+                [Op.like]: `${prefix}%`
               }
-            }
+            },
+            order: [['id', 'DESC']],
+            transaction,
+            lock: transaction ? transaction.LOCK.UPDATE : undefined
+          });
 
-            receipt.receiptNumber = `${prefix}${String(nextNumber).padStart(6, '0')}`;
-            
-            console.log('✅ Número de comprobante generado:', receipt.receiptNumber);
-          } catch (error) {
-            console.error('❌ Error generando número de comprobante:', error);
-            throw error;
+          console.log('🔧 [RECEIPT] Último comprobante:', lastReceipt?.receiptNumber || 'ninguno');
+
+          // Calcular siguiente número
+          let nextNumber = 1;
+          if (lastReceipt && lastReceipt.receiptNumber) {
+            const parts = lastReceipt.receiptNumber.split('-');
+            if (parts.length === 3) {
+              nextNumber = parseInt(parts[2], 10) + 1;
+            }
           }
+
+          // Generar número completo
+          receipt.receiptNumber = `${prefix}${String(nextNumber).padStart(6, '0')}`;
+          
+          console.log('✅ [RECEIPT] Número generado:', receipt.receiptNumber);
+          
+        } catch (error) {
+          console.error('❌ [RECEIPT] Error generando número:', error);
+          throw new Error(`Error generando número de comprobante: ${error.message}`);
         }
       }
     }

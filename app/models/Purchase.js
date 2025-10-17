@@ -2,12 +2,11 @@
  * Modelo de Compra a Proveedores
  * Autor: Alexander Echeverria
  * Ubicacion: app/models/Purchase.js
+ * 
+ * CORRECCIÓN: Hook beforeValidate para generar purchaseNumber
  */
 
 module.exports = (sequelize, DataTypes) => {
-  // ✅ CRÍTICO: Acceder a Op desde sequelize ANTES de definir el modelo
-  const { Op } = sequelize.Sequelize;
-
   const Purchase = sequelize.define('Purchase', {
     id: {
       type: DataTypes.INTEGER,
@@ -91,42 +90,59 @@ module.exports = (sequelize, DataTypes) => {
       { fields: ['status'] }
     ],
     hooks: {
-      beforeCreate: async (purchase, options) => {
-        const transaction = options.transaction;
+      beforeValidate: async (purchase, options) => {
+        // ✅ CAMBIO CRÍTICO: Mover generación a beforeValidate
         
-        if (!purchase.purchaseNumber) {
+        if (purchase.purchaseNumber) {
+          // Ya tiene número, no hacer nada
+          return;
+        }
+
+        try {
+          console.log('🔧 [PURCHASE] Generando purchaseNumber...');
+          
+          const transaction = options.transaction;
+          
+          // Generar prefijo con año y mes
           const year = new Date().getFullYear();
           const month = String(new Date().getMonth() + 1).padStart(2, '0');
           const prefix = `COM-${year}${month}-`;
           
-          // ✅ Op ya está disponible desde el scope superior
-          try {
-            const lastPurchase = await purchase.constructor.findOne({
-              where: {
-                purchaseNumber: {
-                  [Op.like]: `${prefix}%`
-                }
-              },
-              order: [['id', 'DESC']],
-              transaction,
-              lock: transaction ? transaction.LOCK.UPDATE : false
-            });
+          console.log('🔧 [PURCHASE] Prefijo:', prefix);
 
-            let nextNumber = 1;
-            if (lastPurchase && lastPurchase.purchaseNumber) {
-              const parts = lastPurchase.purchaseNumber.split('-');
-              if (parts.length === 3) {
-                nextNumber = parseInt(parts[2]) + 1;
+          // Buscar última compra del mes
+          const { Op } = sequelize.Sequelize;
+          
+          const lastPurchase = await Purchase.findOne({
+            where: {
+              purchaseNumber: {
+                [Op.like]: `${prefix}%`
               }
-            }
+            },
+            order: [['id', 'DESC']],
+            transaction,
+            lock: transaction ? transaction.LOCK.UPDATE : undefined
+          });
 
-            purchase.purchaseNumber = `${prefix}${String(nextNumber).padStart(6, '0')}`;
-            
-            console.log('✅ Número de compra generado:', purchase.purchaseNumber);
-          } catch (error) {
-            console.error('❌ Error generando número de compra:', error);
-            throw error;
+          console.log('🔧 [PURCHASE] Última compra:', lastPurchase?.purchaseNumber || 'ninguna');
+
+          // Calcular siguiente número
+          let nextNumber = 1;
+          if (lastPurchase && lastPurchase.purchaseNumber) {
+            const parts = lastPurchase.purchaseNumber.split('-');
+            if (parts.length === 3) {
+              nextNumber = parseInt(parts[2], 10) + 1;
+            }
           }
+
+          // Generar número completo
+          purchase.purchaseNumber = `${prefix}${String(nextNumber).padStart(6, '0')}`;
+          
+          console.log('✅ [PURCHASE] Número generado:', purchase.purchaseNumber);
+          
+        } catch (error) {
+          console.error('❌ [PURCHASE] Error generando número:', error);
+          throw new Error(`Error generando número de compra: ${error.message}`);
         }
       }
     }

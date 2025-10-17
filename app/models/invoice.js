@@ -2,6 +2,11 @@
  * Modelo de Recibo de Venta (Invoice) - SIN IVA OBLIGATORIO
  * Autor: Alexander Echeverria
  * Ubicacion: app/models/invoice.js
+ * 
+ * CORRECCIÓN COMPLETA: 
+ * - Hook beforeValidate para generar invoiceNumber
+ * - Generación correcta de invoiceDate, invoiceTime e invoiceDateTime
+ * - Eliminados defaultValue problemáticos
  */
 
 module.exports = (sequelize, DataTypes) => {
@@ -38,20 +43,17 @@ module.exports = (sequelize, DataTypes) => {
     invoiceDate: {
       type: DataTypes.DATEONLY,
       allowNull: false,
-      defaultValue: DataTypes.NOW,
-      comment: 'Fecha de la venta'
+      comment: 'Fecha de la venta (generado en hook)'
     },
     invoiceTime: {
       type: DataTypes.TIME,
       allowNull: false,
-      defaultValue: DataTypes.NOW,
-      comment: 'Hora de la venta'
+      comment: 'Hora de la venta (generado en hook)'
     },
     invoiceDateTime: {
       type: DataTypes.DATE,
       allowNull: false,
-      defaultValue: DataTypes.NOW,
-      comment: 'Fecha y hora completa de la venta'
+      comment: 'Fecha y hora completa de la venta (generado en hook)'
     },
     subtotal: {
       type: DataTypes.DECIMAL(12, 2),
@@ -126,29 +128,55 @@ module.exports = (sequelize, DataTypes) => {
       { fields: ['paymentStatus'] }
     ],
     hooks: {
-      beforeCreate: async (invoice, options) => {
-        try {
-          console.log('🔧 [INVOICE HOOK] Iniciando generación de invoiceNumber...');
-          
-          // Si ya tiene invoiceNumber, no hacer nada
-          if (invoice.invoiceNumber) {
-            console.log('🔧 [INVOICE HOOK] invoiceNumber ya existe:', invoice.invoiceNumber);
-            return;
-          }
+      beforeValidate: async (invoice, options) => {
+        // ✅ CAMBIO CRÍTICO: Mover generación a beforeValidate
+        // Esto asegura que invoiceNumber, invoiceDate e invoiceTime existan ANTES de la validación
+        
+        const now = new Date();
+        
+        // ✅ CORRECCIÓN: Generar fechas y hora si no existen
+        if (!invoice.invoiceDateTime) {
+          invoice.invoiceDateTime = now;
+        }
+        
+        if (!invoice.invoiceDate) {
+          // Formato YYYY-MM-DD
+          const year = now.getFullYear();
+          const month = String(now.getMonth() + 1).padStart(2, '0');
+          const day = String(now.getDate()).padStart(2, '0');
+          invoice.invoiceDate = `${year}-${month}-${day}`;
+        }
+        
+        if (!invoice.invoiceTime) {
+          // Formato HH:MM:SS (solo la hora, sin fecha ni zona horaria)
+          const hours = String(now.getHours()).padStart(2, '0');
+          const minutes = String(now.getMinutes()).padStart(2, '0');
+          const seconds = String(now.getSeconds()).padStart(2, '0');
+          invoice.invoiceTime = `${hours}:${minutes}:${seconds}`;
+        }
+        
+        // Generar número de recibo si no existe
+        if (invoice.invoiceNumber) {
+          // Ya tiene número, no hacer nada más
+          return;
+        }
 
+        try {
+          console.log('🔧 [INVOICE] Generando invoiceNumber...');
+          
           const transaction = options.transaction;
-          const { Op } = sequelize.Sequelize;
           
           // Generar prefijo con año y mes
-          const now = new Date();
           const year = now.getFullYear();
           const month = String(now.getMonth() + 1).padStart(2, '0');
           const prefix = `REC-${year}${month}-`;
           
-          console.log('🔧 [INVOICE HOOK] Prefijo generado:', prefix);
+          console.log('🔧 [INVOICE] Prefijo:', prefix);
 
           // Buscar último recibo del mes
-          const lastInvoice = await sequelize.models.Invoice.findOne({
+          const { Op } = sequelize.Sequelize;
+          
+          const lastInvoice = await Invoice.findOne({
             where: {
               invoiceNumber: {
                 [Op.like]: `${prefix}%`
@@ -159,7 +187,7 @@ module.exports = (sequelize, DataTypes) => {
             lock: transaction ? transaction.LOCK.UPDATE : undefined
           });
 
-          console.log('🔧 [INVOICE HOOK] Último recibo encontrado:', lastInvoice?.invoiceNumber || 'ninguno');
+          console.log('🔧 [INVOICE] Último recibo:', lastInvoice?.invoiceNumber || 'ninguno');
 
           // Calcular siguiente número
           let nextNumber = 1;
@@ -173,10 +201,10 @@ module.exports = (sequelize, DataTypes) => {
           // Generar número completo
           invoice.invoiceNumber = `${prefix}${String(nextNumber).padStart(6, '0')}`;
           
-          console.log('✅ [INVOICE HOOK] Número generado:', invoice.invoiceNumber);
+          console.log('✅ [INVOICE] Número generado:', invoice.invoiceNumber);
           
         } catch (error) {
-          console.error('❌ [INVOICE HOOK] Error generando número de recibo:', error);
+          console.error('❌ [INVOICE] Error generando número:', error);
           throw new Error(`Error generando número de recibo: ${error.message}`);
         }
       }
