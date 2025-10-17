@@ -125,37 +125,48 @@ module.exports = (sequelize, DataTypes) => {
       { fields: ['paymentStatus'] }
     ],
     hooks: {
-  beforeCreate: async (invoice, options) => {
-    const transaction = options.transaction;
-    
-    if (!invoice.invoiceNumber) {
-      const year = new Date().getFullYear();
-      const month = String(new Date().getMonth() + 1).padStart(2, '0');
-      
-      // ✅ CORRECCIÓN: Usar invoice.constructor en lugar de Invoice
-      const lastInvoice = await invoice.constructor.findOne({
-        where: {
-          invoiceNumber: {
-            [sequelize.Sequelize.Op.like]: `FAC-${year}${month}-%`
+      beforeCreate: async (invoice, options) => {
+        const transaction = options.transaction;
+        
+        if (!invoice.invoiceNumber) {
+          const year = new Date().getFullYear();
+          const month = String(new Date().getMonth() + 1).padStart(2, '0');
+          const prefix = `FAC-${year}${month}-`;
+          
+          // ✅ CORRECCIÓN: Acceder a Op correctamente
+          const { Op } = require('sequelize');
+          
+          try {
+            // Buscar el último número de factura del mes actual
+            const lastInvoice = await Invoice.findOne({
+              where: {
+                invoiceNumber: {
+                  [Op.like]: `${prefix}%`
+                }
+              },
+              order: [['id', 'DESC']],
+              transaction,
+              lock: transaction ? transaction.LOCK.UPDATE : false
+            });
+
+            let nextNumber = 1;
+            if (lastInvoice && lastInvoice.invoiceNumber) {
+              const parts = lastInvoice.invoiceNumber.split('-');
+              if (parts.length === 3) {
+                nextNumber = parseInt(parts[2]) + 1;
+              }
+            }
+
+            invoice.invoiceNumber = `${prefix}${String(nextNumber).padStart(6, '0')}`;
+            
+            console.log('✅ Número de factura generado:', invoice.invoiceNumber);
+          } catch (error) {
+            console.error('❌ Error generando número de factura:', error);
+            throw error;
           }
-        },
-        order: [['id', 'DESC']],
-        transaction,
-        lock: transaction ? transaction.LOCK.UPDATE : false
-      });
-
-      let nextNumber = 1;
-      if (lastInvoice) {
-        const parts = lastInvoice.invoiceNumber.split('-');
-        nextNumber = parseInt(parts[2]) + 1;
+        }
       }
-
-      invoice.invoiceNumber = `FAC-${year}${month}-${String(nextNumber).padStart(6, '0')}`;
-      
-      console.log('✅ Número de factura generado:', invoice.invoiceNumber);
     }
-  }
-}
   });
 
   return Invoice;

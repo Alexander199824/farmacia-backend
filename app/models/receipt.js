@@ -1,10 +1,13 @@
 /**
- * Modelo de Recibo CORREGIDO
+ * Modelo de Recibo - SOLUCIÓN DEFINITIVA
  * Autor: Alexander Echeverria
  * Ubicacion: app/models/receipt.js
  */
 
 module.exports = (sequelize, DataTypes) => {
+  // ✅ CRÍTICO: Acceder a Op desde sequelize ANTES de definir el modelo
+  const { Op } = sequelize.Sequelize;
+
   const Receipt = sequelize.define('Receipt', {
     id: {
       type: DataTypes.INTEGER,
@@ -98,36 +101,44 @@ module.exports = (sequelize, DataTypes) => {
       { fields: ['status'] }
     ],
     hooks: {
-  beforeCreate: async (receipt, options) => {
-    const transaction = options.transaction;
-    
-    if (!receipt.receiptNumber) {
-      const year = new Date().getFullYear();
-      
-      // ✅ CORRECCIÓN: Usar receipt.constructor
-      const lastReceipt = await receipt.constructor.findOne({
-        where: {
-          receiptNumber: {
-            [sequelize.Sequelize.Op.like]: `REC-${year}-%`
+      beforeCreate: async (receipt, options) => {
+        const transaction = options.transaction;
+        
+        if (!receipt.receiptNumber) {
+          const year = new Date().getFullYear();
+          const prefix = `REC-${year}-`;
+          
+          try {
+            // ✅ Ahora Op está disponible desde el scope superior
+            const lastReceipt = await receipt.constructor.findOne({
+              where: {
+                receiptNumber: {
+                  [Op.like]: `${prefix}%`
+                }
+              },
+              order: [['id', 'DESC']],
+              transaction,
+              lock: transaction ? transaction.LOCK.UPDATE : false
+            });
+
+            let nextNumber = 1;
+            if (lastReceipt && lastReceipt.receiptNumber) {
+              const parts = lastReceipt.receiptNumber.split('-');
+              if (parts.length === 3) {
+                nextNumber = parseInt(parts[2]) + 1;
+              }
+            }
+
+            receipt.receiptNumber = `${prefix}${String(nextNumber).padStart(6, '0')}`;
+            
+            console.log('✅ Número de recibo generado:', receipt.receiptNumber);
+          } catch (error) {
+            console.error('❌ Error generando número de recibo:', error);
+            throw error;
           }
-        },
-        order: [['id', 'DESC']],
-        transaction,
-        lock: transaction ? transaction.LOCK.UPDATE : false
-      });
-
-      let nextNumber = 1;
-      if (lastReceipt) {
-        const parts = lastReceipt.receiptNumber.split('-');
-        nextNumber = parseInt(parts[2]) + 1;
+        }
       }
-
-      receipt.receiptNumber = `REC-${year}-${String(nextNumber).padStart(6, '0')}`;
-      
-      console.log('✅ Número de recibo generado:', receipt.receiptNumber);
     }
-  }
-}
   });
 
   return Receipt;

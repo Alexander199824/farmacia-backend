@@ -85,37 +85,47 @@ module.exports = (sequelize, DataTypes) => {
       { fields: ['status'] }
     ],
     hooks: {
-  beforeCreate: async (purchase, options) => {
-    const transaction = options.transaction;
-    
-    if (!purchase.purchaseNumber) {
-      const year = new Date().getFullYear();
-      const month = String(new Date().getMonth() + 1).padStart(2, '0');
-      
-      // ✅ CORRECCIÓN: Usar purchase.constructor
-      const lastPurchase = await purchase.constructor.findOne({
-        where: {
-          purchaseNumber: {
-            [sequelize.Sequelize.Op.like]: `COM-${year}${month}-%`
+      beforeCreate: async (purchase, options) => {
+        const transaction = options.transaction;
+        
+        if (!purchase.purchaseNumber) {
+          const year = new Date().getFullYear();
+          const month = String(new Date().getMonth() + 1).padStart(2, '0');
+          const prefix = `COM-${year}${month}-`;
+          
+          // ✅ CORRECCIÓN: Acceder a Op correctamente
+          const { Op } = require('sequelize');
+          
+          try {
+            const lastPurchase = await Purchase.findOne({
+              where: {
+                purchaseNumber: {
+                  [Op.like]: `${prefix}%`
+                }
+              },
+              order: [['id', 'DESC']],
+              transaction,
+              lock: transaction ? transaction.LOCK.UPDATE : false
+            });
+
+            let nextNumber = 1;
+            if (lastPurchase && lastPurchase.purchaseNumber) {
+              const parts = lastPurchase.purchaseNumber.split('-');
+              if (parts.length === 3) {
+                nextNumber = parseInt(parts[2]) + 1;
+              }
+            }
+
+            purchase.purchaseNumber = `${prefix}${String(nextNumber).padStart(6, '0')}`;
+            
+            console.log('✅ Número de compra generado:', purchase.purchaseNumber);
+          } catch (error) {
+            console.error('❌ Error generando número de compra:', error);
+            throw error;
           }
-        },
-        order: [['id', 'DESC']],
-        transaction,
-        lock: transaction ? transaction.LOCK.UPDATE : false
-      });
-
-      let nextNumber = 1;
-      if (lastPurchase) {
-        const parts = lastPurchase.purchaseNumber.split('-');
-        nextNumber = parseInt(parts[2]) + 1;
+        }
       }
-
-      purchase.purchaseNumber = `COM-${year}${month}-${String(nextNumber).padStart(6, '0')}`;
-      
-      console.log('✅ Número de compra generado:', purchase.purchaseNumber);
     }
-  }
-}
   });
 
   return Purchase;

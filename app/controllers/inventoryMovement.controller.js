@@ -86,8 +86,8 @@ exports.createMovement = async (req, res) => {
             const batch = await Batch.findByPk(batchId);
             if (batch) {
                 await batch.update({ 
-    currentQuantity: batch.currentQuantity + movementQuantity 
-}); 
+                    currentQuantity: batch.currentQuantity + movementQuantity 
+                }); 
             }
         }
 
@@ -310,12 +310,14 @@ exports.deleteMovement = async (req, res) => {
         }
 
         // Si hay lote, revertir su cantidad
+        // ✅ CORRECCIÓN: usar movement.quantity en lugar de movementQuantity
         if (movement.batchId) {
             const batch = await Batch.findByPk(movement.batchId);
             if (batch) {
+                // Revertir la cantidad (invertir el movimiento)
                 await batch.update({ 
-    currentQuantity: batch.currentQuantity + movementQuantity 
-});
+                    currentQuantity: batch.currentQuantity - movement.quantity 
+                });
             }
         }
 
