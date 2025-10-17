@@ -85,17 +85,23 @@ module.exports = (sequelize, DataTypes) => {
       { fields: ['status'] }
     ],
     hooks: {
-      beforeCreate: async (purchase) => {
+      beforeCreate: async (purchase, options) => {
+        // ✅ CRÍTICO: Usar la transacción del contexto
+        const transaction = options.transaction;
+        
         if (!purchase.purchaseNumber) {
           const year = new Date().getFullYear();
           const month = String(new Date().getMonth() + 1).padStart(2, '0');
+          
           const lastPurchase = await sequelize.models.Purchase.findOne({
             where: {
               purchaseNumber: {
                 [sequelize.Sequelize.Op.like]: `COM-${year}${month}-%`
               }
             },
-            order: [['id', 'DESC']]
+            order: [['id', 'DESC']],
+            transaction, // ✅ Pasar la transacción
+            lock: transaction ? transaction.LOCK.UPDATE : false // ✅ Lock para evitar race conditions
           });
 
           let nextNumber = 1;

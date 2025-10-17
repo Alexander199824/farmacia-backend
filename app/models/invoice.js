@@ -124,30 +124,36 @@ module.exports = (sequelize, DataTypes) => {
       { fields: ['paymentMethod'] },
       { fields: ['paymentStatus'] }
     ],
-    hooks: {
-      beforeCreate: async (invoice) => {
-        if (!invoice.invoiceNumber) {
-          const year = new Date().getFullYear();
-          const month = String(new Date().getMonth() + 1).padStart(2, '0');
-          const lastInvoice = await sequelize.models.Invoice.findOne({
-            where: {
-              invoiceNumber: {
-                [sequelize.Sequelize.Op.like]: `FAC-${year}${month}-%`
-              }
-            },
-            order: [['id', 'DESC']]
-          });
-
-          let nextNumber = 1;
-          if (lastInvoice) {
-            const parts = lastInvoice.invoiceNumber.split('-');
-            nextNumber = parseInt(parts[2]) + 1;
+   hooks: {
+  beforeCreate: async (invoice, options) => {
+    // ✅ CRÍTICO: Usar la transacción del contexto
+    const transaction = options.transaction;
+    
+    if (!invoice.invoiceNumber) {
+      const year = new Date().getFullYear();
+      const month = String(new Date().getMonth() + 1).padStart(2, '0');
+      
+      const lastInvoice = await sequelize.models.Invoice.findOne({
+        where: {
+          invoiceNumber: {
+            [sequelize.Sequelize.Op.like]: `FAC-${year}${month}-%`
           }
+        },
+        order: [['id', 'DESC']],
+        transaction, // ✅ Pasar la transacción
+        lock: transaction ? transaction.LOCK.UPDATE : false // ✅ Lock para evitar race conditions
+      });
 
-          invoice.invoiceNumber = `FAC-${year}${month}-${String(nextNumber).padStart(6, '0')}`;
-        }
+      let nextNumber = 1;
+      if (lastInvoice) {
+        const parts = lastInvoice.invoiceNumber.split('-');
+        nextNumber = parseInt(parts[2]) + 1;
       }
+
+      invoice.invoiceNumber = `FAC-${year}${month}-${String(nextNumber).padStart(6, '0')}`;
     }
+  }
+}
   });
 
   return Invoice;

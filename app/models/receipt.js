@@ -98,16 +98,22 @@ module.exports = (sequelize, DataTypes) => {
       { fields: ['status'] }
     ],
     hooks: {
-      beforeCreate: async (receipt) => {
+      beforeCreate: async (receipt, options) => {
+        // ✅ CRÍTICO: Usar la transacción del contexto
+        const transaction = options.transaction;
+        
         if (!receipt.receiptNumber) {
           const year = new Date().getFullYear();
+          
           const lastReceipt = await sequelize.models.Receipt.findOne({
             where: {
               receiptNumber: {
                 [sequelize.Sequelize.Op.like]: `REC-${year}-%`
               }
             },
-            order: [['id', 'DESC']]
+            order: [['id', 'DESC']],
+            transaction, // ✅ Pasar la transacción
+            lock: transaction ? transaction.LOCK.UPDATE : false // ✅ Lock para evitar race conditions
           });
 
           let nextNumber = 1;
