@@ -573,30 +573,23 @@ exports.getOutOfStockProducts = async (req, res) => {
     }
 };
 
+
 // Obtener estadísticas de productos
 exports.getProductStats = async (req, res) => {
     try {
+        // Obtener todos los productos para calcular estadísticas
+        const allProducts = await Product.findAll({
+            attributes: ['id', 'stock', 'minStock', 'isActive', 'requiresPrescription', 'category', 'costPrice']
+        });
+
         const stats = {
-            total: await Product.count(),
-            active: await Product.count({ where: { isActive: true } }),
-            inactive: await Product.count({ where: { isActive: false } }),
-            withStock: await Product.count({ where: { stock: { [Op.gt]: 0 } } }),
-            outOfStock: await Product.count({ where: { stock: 0 } }),
-            
-            // ⬇️ CORREGIDO: Usar sequelize.where() en lugar de col() directo
-            lowStock: await Product.count({
-                where: db.Sequelize.where(
-                    db.Sequelize.col('stock'),
-                    {
-                        [Op.and]: [
-                            { [Op.gt]: 0 },
-                            { [Op.lte]: db.Sequelize.col('minStock') }
-                        ]
-                    }
-                )
-            }),
-            
-            requiresPrescription: await Product.count({ where: { requiresPrescription: true } }),
+            total: allProducts.length,
+            active: allProducts.filter(p => p.isActive).length,
+            inactive: allProducts.filter(p => !p.isActive).length,
+            withStock: allProducts.filter(p => p.stock > 0).length,
+            outOfStock: allProducts.filter(p => p.stock === 0).length,
+            lowStock: allProducts.filter(p => p.stock > 0 && p.stock <= p.minStock).length,
+            requiresPrescription: allProducts.filter(p => p.requiresPrescription).length,
             
             byCategory: await Product.findAll({
                 attributes: [
@@ -607,9 +600,9 @@ exports.getProductStats = async (req, res) => {
                 order: [[db.Sequelize.fn('COUNT', db.Sequelize.col('id')), 'DESC']]
             }),
 
-            totalInventoryValue: await Product.sum(
-                db.Sequelize.literal('stock * "costPrice"')
-            ) || 0
+            totalInventoryValue: allProducts.reduce((sum, p) => {
+                return sum + (p.stock * parseFloat(p.costPrice || 0));
+            }, 0)
         };
 
         res.status(200).json(stats);

@@ -142,7 +142,7 @@ async function getExpiringProductsAlerts(days = 30) {
                 [Op.lte]: futureDate,
                 [Op.gte]: new Date()
             },
-            quantity: { [Op.gt]: 0 },
+            currentQuantity: { [Op.gt]: 0 },
             status: { [Op.in]: ['active', 'near_expiry'] }
         },
         include: [{
@@ -171,8 +171,8 @@ async function getExpiringProductsAlerts(days = 30) {
                 },
                 expirationDate: b.expirationDate,
                 daysUntilExpiry,
-                quantity: b.quantity,
-                estimatedLoss: parseFloat(b.product.price) * b.quantity,
+                quantity: b.currentQuantity, 
+                estimatedLoss: parseFloat(b.product.price) * b.currentQuantity,
                 message: `Vence en ${daysUntilExpiry} día${daysUntilExpiry !== 1 ? 's' : ''}`
             };
         })
@@ -183,7 +183,7 @@ async function getExpiredProductsAlerts() {
     const batches = await Batch.findAll({
         where: {
             expirationDate: { [Op.lt]: new Date() },
-            quantity: { [Op.gt]: 0 }
+            currentQuantity: { [Op.gt]: 0 } 
         },
         include: [{
             model: Product,
@@ -194,7 +194,7 @@ async function getExpiredProductsAlerts() {
     });
 
     const totalLoss = batches.reduce((sum, b) => {
-        return sum + (parseFloat(b.product.price) * b.quantity);
+        return sum + (parseFloat(b.product.price) * b.currentQuantity);
     }, 0);
 
     return {
@@ -215,8 +215,8 @@ async function getExpiredProductsAlerts() {
                 },
                 expirationDate: b.expirationDate,
                 daysExpired,
-                quantity: b.quantity,
-                estimatedLoss: parseFloat(b.product.price) * b.quantity,
+                quantity: b.currentQuantity, 
+                estimatedLoss: parseFloat(b.product.price) * b.currentQuantity,
                 message: `Vencido hace ${daysExpired} día${daysExpired !== 1 ? 's' : ''}`
             };
         })
@@ -224,46 +224,12 @@ async function getExpiredProductsAlerts() {
 }
 
 async function getPendingApprovalsAlerts() {
-    const movements = await InventoryMovement.findAll({
-        where: {
-            approved: false
-        },
-        include: [
-            {
-                model: Product,
-                as: 'product',
-                attributes: ['id', 'name']
-            },
-            {
-                model: db.User,
-                as: 'user',
-                // ⬇️ CORREGIDO: Usar firstName y lastName en lugar de username
-                attributes: ['id', 'firstName', 'lastName', 'email']
-            }
-        ],
-        order: [['createdAt', 'ASC']]
-    });
-
+    // ⚠️ El modelo InventoryMovement no tiene campo 'approved'
+    // Retornamos estructura vacía hasta implementar aprobaciones
     return {
         type: 'pending_approvals',
         severity: 'medium',
-        count: movements.length,
-        movements: movements.map(m => ({
-            id: m.id,
-            movementType: m.movementType,
-            product: {
-                id: m.product.id,
-                name: m.product.name
-            },
-            quantity: m.quantity,
-            requestedBy: {
-                id: m.user.id,
-                // ⬇️ CORREGIDO: Concatenar firstName y lastName
-                name: `${m.user.firstName} ${m.user.lastName}`,
-                email: m.user.email
-            },
-            requestDate: m.createdAt,
-            message: `Movimiento de ${m.movementType} pendiente de aprobación`
-        }))
+        count: 0,
+        movements: []
     };
 }

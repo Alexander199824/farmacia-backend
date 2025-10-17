@@ -63,20 +63,20 @@ exports.getDashboard = async (req, res) => {
             col: 'clientId'
         });
 
-        // Productos con stock bajo (menos del stock mínimo)
-        const lowStockProducts = await Product.count({
-     where: {
-        [Op.and]: [
-        db.Sequelize.where(
-                        db.Sequelize.col('stock'),
-                        Op.lte,
-                        db.Sequelize.col('minStock')
-                        ),
-                        { stock: { [Op.gt]: 0 } },
-                        { isActive: true }
-                    ]
-                }
-            });
+        // ✅ Productos con stock bajo - CORREGIDO
+        const allActiveProducts = await Product.findAll({
+            where: { isActive: true },
+            attributes: ['stock', 'minStock']
+        });
+        const lowStockProducts = allActiveProducts.filter(p => p.stock > 0 && p.stock <= p.minStock).length;
+
+        // Productos agotados
+        const outOfStockProducts = await Product.count({
+            where: {
+                stock: 0,
+                isActive: true
+            }
+        });
 
         // Productos próximos a vencer (30 días)
         const futureDate = new Date();
@@ -119,13 +119,14 @@ exports.getDashboard = async (req, res) => {
             group: ['paymentMethod']
         });
 
-        // Valor total del inventario
-        const inventoryValue = await Product.sum(
-            db.Sequelize.literal('stock * "costPrice"'),
-            {
-                where: { isActive: true }
-            }
-        ) || 0;
+        // ✅ Valor total del inventario - CORREGIDO
+        const activeProducts = await Product.findAll({
+            where: { isActive: true },
+            attributes: ['stock', 'costPrice']
+        });
+        const inventoryValue = activeProducts.reduce((sum, p) => {
+            return sum + (p.stock * parseFloat(p.costPrice || 0));
+        }, 0);
 
         res.status(200).json({
             sales: {
