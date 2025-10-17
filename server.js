@@ -15,7 +15,7 @@ const env = require('./app/config/env');
 
 const CONFIG = {
     // ⚙️ SINCRONIZAR BD: true = Actualiza estructura (sin borrar datos)
-    SYNC_DATABASE: true,
+    SYNC_DATABASE: false,
     
     // 🔄 RECREAR TABLAS: true = Elimina y recrea todas las tablas (BORRA DATOS)
     RECREATE_TABLES: false,  // ⚠️ PELIGROSO: Cambia a true solo para desarrollo
