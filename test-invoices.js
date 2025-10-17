@@ -118,20 +118,26 @@ async function setupTestData() {
         log(colors.green, '✓', `Lote creado: ID ${testBatchId} (100 unidades disponibles)`);
         await sleep(200);
         
-        // 5. Crear cliente de test
+        // 5. Crear cliente de test con DPI y NIT únicos
         log(colors.blue, '→', 'Creando cliente de prueba...');
+        const timestamp = Date.now();
+        const uniqueDPI = String(timestamp).slice(-13).padStart(13, '0'); // DPI único de 13 dígitos
+        const uniqueNIT = String(timestamp).slice(-8).padStart(8, '0'); // NIT único de 8 dígitos
+        
         const clientRes = await axios.post(`${API_URL}/users/register`, {
-            email: `client${Date.now()}@test.com`,
+            email: `client${timestamp}@test.com`,
             password: 'Client123!',
             firstName: 'Cliente',
             lastName: 'Test',
             role: 'cliente',
             phone: '55555555',
-            dpi: '1234567890123',
-            nit: '12345678'
+            dpi: uniqueDPI,
+            nit: uniqueNIT
         });
         testClientId = clientRes.data.user.id;
         log(colors.green, '✓', `Cliente creado: ID ${testClientId}`);
+        log(colors.magenta, 'ℹ', `DPI: ${uniqueDPI}`);
+        log(colors.magenta, 'ℹ', `NIT: ${uniqueNIT}`);
         await sleep(200);
         
         log(colors.cyan, '\n✓', 'Configuración completada exitosamente\n');
@@ -500,7 +506,7 @@ async function testMultiBatchSale() {
         // Vender cantidad que requiera ambos lotes
         log(colors.blue, '→', 'Vendiendo cantidad que usa ambos lotes...');
         
-        // Vender 95 unidades (usará el lote 1 que tiene ~85 y el lote 2 que tiene 50)
+        // Calcular cuánto stock queda del primer lote (ya vendimos 15 unidades en tests anteriores)
         const quantityToSell = Math.min(95, totalStock - 5);
         
         const saleRes = await axios.post(`${API_URL}/invoices`, {
