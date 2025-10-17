@@ -1,5 +1,5 @@
 /**
- * Modelo de Factura con todas las funcionalidades
+ * Modelo de Factura CORREGIDO
  * Autor: Alexander Echeverria
  * Ubicacion: app/models/Invoice.js
  */
@@ -124,36 +124,39 @@ module.exports = (sequelize, DataTypes) => {
       { fields: ['paymentMethod'] },
       { fields: ['paymentStatus'] }
     ],
-   hooks: {
-  beforeCreate: async (invoice, options) => {
-    // ✅ CRÍTICO: Usar la transacción del contexto
-    const transaction = options.transaction;
-    
-    if (!invoice.invoiceNumber) {
-      const year = new Date().getFullYear();
-      const month = String(new Date().getMonth() + 1).padStart(2, '0');
-      
-      const lastInvoice = await sequelize.models.Invoice.findOne({
-        where: {
-          invoiceNumber: {
-            [sequelize.Sequelize.Op.like]: `FAC-${year}${month}-%`
+    hooks: {
+      beforeCreate: async (invoice, options) => {
+        // ✅ CRÍTICO: Usar invoice.sequelize para acceder al modelo
+        const transaction = options.transaction;
+        
+        if (!invoice.invoiceNumber) {
+          const year = new Date().getFullYear();
+          const month = String(new Date().getMonth() + 1).padStart(2, '0');
+          
+          // ✅ CORRECCIÓN: Usar invoice.sequelize o Invoice directamente
+          const lastInvoice = await Invoice.findOne({
+            where: {
+              invoiceNumber: {
+                [sequelize.Sequelize.Op.like]: `FAC-${year}${month}-%`
+              }
+            },
+            order: [['id', 'DESC']],
+            transaction,
+            lock: transaction ? transaction.LOCK.UPDATE : false
+          });
+
+          let nextNumber = 1;
+          if (lastInvoice) {
+            const parts = lastInvoice.invoiceNumber.split('-');
+            nextNumber = parseInt(parts[2]) + 1;
           }
-        },
-        order: [['id', 'DESC']],
-        transaction, // ✅ Pasar la transacción
-        lock: transaction ? transaction.LOCK.UPDATE : false // ✅ Lock para evitar race conditions
-      });
 
-      let nextNumber = 1;
-      if (lastInvoice) {
-        const parts = lastInvoice.invoiceNumber.split('-');
-        nextNumber = parseInt(parts[2]) + 1;
+          invoice.invoiceNumber = `FAC-${year}${month}-${String(nextNumber).padStart(6, '0')}`;
+          
+          console.log('✅ Número de factura generado:', invoice.invoiceNumber);
+        }
       }
-
-      invoice.invoiceNumber = `FAC-${year}${month}-${String(nextNumber).padStart(6, '0')}`;
     }
-  }
-}
   });
 
   return Invoice;

@@ -86,8 +86,8 @@ exports.createMovement = async (req, res) => {
             const batch = await Batch.findByPk(batchId);
             if (batch) {
                 await batch.update({ 
-                    quantity: batch.quantity + movementQuantity 
-                });
+    currentQuantity: batch.currentQuantity + movementQuantity 
+}); 
             }
         }
 
@@ -314,8 +314,8 @@ exports.deleteMovement = async (req, res) => {
             const batch = await Batch.findByPk(movement.batchId);
             if (batch) {
                 await batch.update({ 
-                    quantity: batch.quantity - movement.quantity 
-                });
+    currentQuantity: batch.currentQuantity + movementQuantity 
+});
             }
         }
 

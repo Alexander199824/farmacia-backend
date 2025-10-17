@@ -1,5 +1,5 @@
 /**
- * Modelo de Recibo vinculado a Invoice
+ * Modelo de Recibo CORREGIDO
  * Autor: Alexander Echeverria
  * Ubicacion: app/models/receipt.js
  */
@@ -99,21 +99,22 @@ module.exports = (sequelize, DataTypes) => {
     ],
     hooks: {
       beforeCreate: async (receipt, options) => {
-        // ✅ CRÍTICO: Usar la transacción del contexto
+        // ✅ CRÍTICO: Usar Receipt directamente
         const transaction = options.transaction;
         
         if (!receipt.receiptNumber) {
           const year = new Date().getFullYear();
           
-          const lastReceipt = await sequelize.models.Receipt.findOne({
+          // ✅ CORRECCIÓN: Usar Receipt directamente
+          const lastReceipt = await Receipt.findOne({
             where: {
               receiptNumber: {
                 [sequelize.Sequelize.Op.like]: `REC-${year}-%`
               }
             },
             order: [['id', 'DESC']],
-            transaction, // ✅ Pasar la transacción
-            lock: transaction ? transaction.LOCK.UPDATE : false // ✅ Lock para evitar race conditions
+            transaction,
+            lock: transaction ? transaction.LOCK.UPDATE : false
           });
 
           let nextNumber = 1;
@@ -123,6 +124,8 @@ module.exports = (sequelize, DataTypes) => {
           }
 
           receipt.receiptNumber = `REC-${year}-${String(nextNumber).padStart(6, '0')}`;
+          
+          console.log('✅ Número de recibo generado:', receipt.receiptNumber);
         }
       }
     }

@@ -1,5 +1,5 @@
 /**
- * Modelo de Compra
+ * Modelo de Compra CORREGIDO
  * Autor: Alexander Echeverria
  * Ubicacion: app/models/Purchase.js
  */
@@ -86,22 +86,23 @@ module.exports = (sequelize, DataTypes) => {
     ],
     hooks: {
       beforeCreate: async (purchase, options) => {
-        // ✅ CRÍTICO: Usar la transacción del contexto
+        // ✅ CRÍTICO: Usar Purchase directamente
         const transaction = options.transaction;
         
         if (!purchase.purchaseNumber) {
           const year = new Date().getFullYear();
           const month = String(new Date().getMonth() + 1).padStart(2, '0');
           
-          const lastPurchase = await sequelize.models.Purchase.findOne({
+          // ✅ CORRECCIÓN: Usar Purchase directamente
+          const lastPurchase = await Purchase.findOne({
             where: {
               purchaseNumber: {
                 [sequelize.Sequelize.Op.like]: `COM-${year}${month}-%`
               }
             },
             order: [['id', 'DESC']],
-            transaction, // ✅ Pasar la transacción
-            lock: transaction ? transaction.LOCK.UPDATE : false // ✅ Lock para evitar race conditions
+            transaction,
+            lock: transaction ? transaction.LOCK.UPDATE : false
           });
 
           let nextNumber = 1;
@@ -111,6 +112,8 @@ module.exports = (sequelize, DataTypes) => {
           }
 
           purchase.purchaseNumber = `COM-${year}${month}-${String(nextNumber).padStart(6, '0')}`;
+          
+          console.log('✅ Número de compra generado:', purchase.purchaseNumber);
         }
       }
     }
