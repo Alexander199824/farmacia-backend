@@ -237,36 +237,61 @@ exports.loginWithGoogle = async (req, res) => {
     try {
         const { tokenId } = req.body;
 
+        if (!tokenId) {
+            return res.status(400).json({
+                message: "Token de Google requerido"
+            });
+        }
+
         const ticket = await googleClient.verifyIdToken({
             idToken: tokenId,
             audience: env.googleClientId
         });
 
         const payload = ticket.getPayload();
-        const { sub: googleId, email } = payload;
+        const { sub: googleId, email, given_name, family_name, picture } = payload;
 
-        const user = await User.findOne({
+        // Buscar usuario por email o googleId
+        let user = await User.findOne({
             where: {
                 [Op.or]: [{ googleId }, { email }]
             }
         });
 
-        if (!user) {
-            return res.status(404).json({
-                message: "Usuario no encontrado. Por favor, regístrate primero"
+        if (user) {
+            // Usuario existe - actualizar datos si es necesario
+            if (!user.isActive) {
+                return res.status(403).json({ message: "Cuenta desactivada" });
+            }
+
+            if (!user.googleId) {
+                await user.update({ 
+                    googleId, 
+                    emailVerified: true,
+                    profileImage: picture || user.profileImage
+                });
+            }
+
+            await user.update({ lastLogin: new Date() });
+
+        } else {
+            // Usuario NO existe - crear automáticamente como CLIENTE
+            user = await User.create({
+                email,
+                googleId,
+                firstName: given_name || 'Usuario',
+                lastName: family_name || 'Google',
+                profileImage: picture,
+                role: 'cliente', // ← ROL POR DEFECTO
+                isActive: true,
+                emailVerified: true,
+                password: null
             });
+
+            console.log('✅ Nuevo usuario creado automáticamente con Google:', user.email);
         }
 
-        if (!user.isActive) {
-            return res.status(403).json({ message: "Cuenta desactivada" });
-        }
-
-        if (!user.googleId) {
-            await user.update({ googleId, emailVerified: true });
-        }
-
-        await user.update({ lastLogin: new Date() });
-
+        // Generar JWT
         const token = jwt.sign(
             { id: user.id, role: user.role, email: user.email },
             env.jwtSecret,
@@ -274,7 +299,7 @@ exports.loginWithGoogle = async (req, res) => {
         );
 
         res.status(200).json({
-            message: "Inicio de sesión con Google exitoso",
+            message: user ? "Inicio de sesión con Google exitoso" : "Usuario creado y autenticado",
             token,
             user: {
                 id: user.id,
@@ -286,13 +311,13 @@ exports.loginWithGoogle = async (req, res) => {
             }
         });
     } catch (error) {
+        console.error('Error en inicio de sesión con Google:', error);
         res.status(500).json({
             message: "Error en inicio de sesión con Google",
             error: error.message
         });
     }
 };
-
 // ========== PERFIL ==========
 
 exports.getProfile = async (req, res) => {

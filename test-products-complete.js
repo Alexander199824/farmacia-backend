@@ -323,6 +323,7 @@ async function testCreateSuppliers() {
 // ═══════════════════════════════════════════════════════════════════
 
 async function createProductWithImage(productData) {
+    const FormData = require('form-data');
     const formData = new FormData();
     
     // Agregar todos los campos del producto
@@ -330,9 +331,16 @@ async function createProductWithImage(productData) {
         formData.append(key, productData[key]);
     });
     
-    // SOLUCIÓN CORREGIDA: Usar createReadStream directamente
-    // FormData acepta streams de lectura
-    formData.append('image', fs.createReadStream(PRODUCT_IMAGE_PATH));
+    // ✅ SOLUCIÓN DEFINITIVA: Usar createReadStream con todas las opciones
+    const fileStream = fs.createReadStream(PRODUCT_IMAGE_PATH);
+    const stats = fs.statSync(PRODUCT_IMAGE_PATH);
+    const filename = path.basename(PRODUCT_IMAGE_PATH);
+    
+    formData.append('image', fileStream, {
+        filename: filename,
+        contentType: 'image/jpeg',
+        knownLength: stats.size
+    });
     
     try {
         const response = await axios.post(`${API_URL}/products`, formData, {
@@ -346,6 +354,10 @@ async function createProductWithImage(productData) {
         
         return response.data;
     } catch (error) {
+        // Cerrar el stream en caso de error
+        if (fileStream && !fileStream.destroyed) {
+            fileStream.destroy();
+        }
         throw error;
     }
 }
