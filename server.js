@@ -18,10 +18,10 @@ const CONFIG = {
     SYNC_DATABASE: false,
     
     // 🔄 RECREAR TABLAS: true = Elimina y recrea todas las tablas (BORRA DATOS)
-    RECREATE_TABLES: true,  // ⚠️ PELIGROSO: Cambia a true solo para desarrollo
+    RECREATE_TABLES: false,  // ⚠️ PELIGROSO: Cambia a true solo para desarrollo
     
     // 👥 INSERTAR USUARIOS: true = Crea usuarios por defecto si no existen
-    CREATE_DEFAULT_USERS: true,
+    CREATE_DEFAULT_USERS: false,
     
     // 📦 INSERTAR DATOS DE PRUEBA: true = Crea productos y lotes de ejemplo
     CREATE_SAMPLE_DATA: false
