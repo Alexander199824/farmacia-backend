@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node tests/test-audit.js:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

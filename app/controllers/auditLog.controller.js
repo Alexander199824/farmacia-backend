@@ -52,7 +52,7 @@ exports.getAllLogs = async (req, res) => {
             include: [{
                 model: User,
                 as: 'user',
-                attributes: ['id', 'username', 'role'],
+                attributes: ['id', 'firstName', 'lastName', 'email', 'role'],
                 required: false
             }],
             order: [['createdAt', 'DESC']],
@@ -111,7 +111,7 @@ exports.getLogsByUser = async (req, res) => {
             include: [{
                 model: User,
                 as: 'user',
-                attributes: ['id', 'username']
+                attributes: ['id', 'firstName', 'lastName', 'email', 'role']
             }],
             order: [['createdAt', 'DESC']],
             limit: parseInt(limit)
@@ -140,7 +140,7 @@ exports.getLogsByEntity = async (req, res) => {
             include: [{
                 model: User,
                 as: 'user',
-                attributes: ['id', 'username']
+                attributes: ['id', 'firstName', 'lastName', 'email', 'role']
             }],
             order: [['createdAt', 'DESC']],
             limit: parseInt(limit)
@@ -207,9 +207,9 @@ exports.getAuditStats = async (req, res) => {
                 include: [{
                     model: User,
                     as: 'user',
-                    attributes: ['username']
+                    attributes: ['firstName', 'lastName', 'email']
                 }],
-                group: ['userId', 'user.id', 'user.username'],
+                group: ['userId', 'user.id', 'user.firstName', 'user.lastName', 'user.email'],
                 order: [[db.Sequelize.fn('COUNT', db.Sequelize.col('id')), 'DESC']],
                 limit: 10
             }),
@@ -255,7 +255,7 @@ exports.getRecentActivity = async (req, res) => {
             include: [{
                 model: User,
                 as: 'user',
-                attributes: ['id', 'username', 'role']
+                attributes: ['id', 'firstName', 'lastName', 'email', 'role']
             }],
             order: [['createdAt', 'DESC']],
             limit: parseInt(limit)
