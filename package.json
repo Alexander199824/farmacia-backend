@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "build": "npm rebuild bcrypt --build-from-source",
     "db:reset": "node resetDatabase.js",
     "db:seed": "node resetDatabase.js --seed",
     "test": "echo \"Tests pendientes\" && exit 0"
