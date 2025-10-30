@@ -74,7 +74,7 @@ function printWarning(message) {
     console.log(colors.yellow + '⚠ ' + message + colors.reset);
 }
 
-// ========== FUNCIONES DE USUARIO ==========
+// ========== FUNCIONES DE USUARIO =============
 
 async function loginUser() {
     printHeader('LOGIN DE USUARIO');
