@@ -26,7 +26,6 @@ exports.register = async (req, res) => {
             firstName,
             lastName,
             dpi,
-            nit,
             phone,
             address,
             birthDate,
@@ -58,12 +57,12 @@ exports.register = async (req, res) => {
             lastName,
             role,
             dpi,
-            nit,
             phone,
             address,
             birthDate,
             isActive: true,
             emailVerified: false
+            // nit: No se usa en sistema local (solo recibos simples, no facturas)
         };
 
         if (req.file) {
@@ -344,33 +343,39 @@ exports.getProfile = async (req, res) => {
 exports.updateProfile = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { firstName, lastName, phone, address, birthDate, nit } = req.body;
+        const { firstName, lastName, phone, address, birthDate, dpi } = req.body;
 
         const user = await User.findByPk(userId);
         if (!user) {
             return res.status(404).json({ message: "Usuario no encontrado" });
         }
 
+        // Permitir edición de campos individuales
         const updates = {};
-        if (firstName) updates.firstName = firstName;
-        if (lastName) updates.lastName = lastName;
+        if (firstName !== undefined) updates.firstName = firstName;
+        if (lastName !== undefined) updates.lastName = lastName;
         if (phone !== undefined) updates.phone = phone;
         if (address !== undefined) updates.address = address;
         if (birthDate !== undefined) updates.birthDate = birthDate;
-        if (nit !== undefined) updates.nit = nit;
-
-        if (req.file) {
-            if (user.cloudinaryPublicId) {
-                await cloudinary.uploader.destroy(user.cloudinaryPublicId);
+        if (dpi !== undefined) {
+            // Validar que el DPI no esté en uso por otro usuario
+            if (dpi && dpi !== user.dpi) {
+                const existingDPI = await User.findOne({
+                    where: { dpi, id: { [Op.ne]: userId } }
+                });
+                if (existingDPI) {
+                    return res.status(400).json({ message: "El DPI ya está registrado por otro usuario" });
+                }
             }
+            updates.dpi = dpi;
+        }
+        // nit: No se usa en sistema local (solo recibos simples, no facturas)
 
-            const result = await cloudinary.uploader.upload(req.file.path, {
-                folder: 'farmacia-elizabeth/users',
-                transformation: [{ width: 400, height: 400, crop: 'fill', gravity: 'face' }]
+        // Si no hay cambios y no hay imagen, retornar error
+        if (Object.keys(updates).length === 0 && !req.file) {
+            return res.status(400).json({
+                message: "No se proporcionaron campos para actualizar"
             });
-
-            updates.profileImage = result.secure_url;
-            updates.cloudinaryPublicId = result.public_id;
         }
 
         await user.update(updates);
@@ -384,6 +389,8 @@ exports.updateProfile = async (req, res) => {
                 lastName: user.lastName,
                 phone: user.phone,
                 address: user.address,
+                dpi: user.dpi,
+                birthDate: user.birthDate,
                 profileImage: user.profileImage
             }
         });
@@ -395,14 +402,62 @@ exports.updateProfile = async (req, res) => {
     }
 };
 
+exports.updateProfileImage = async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(404).json({ message: "Usuario no encontrado" });
+        }
+
+        if (!req.file) {
+            return res.status(400).json({
+                message: "No se proporcionó ninguna imagen"
+            });
+        }
+
+        // Eliminar imagen anterior de Cloudinary si existe
+        if (user.cloudinaryPublicId) {
+            try {
+                await cloudinary.uploader.destroy(user.cloudinaryPublicId);
+            } catch (error) {
+                console.error('Error al eliminar imagen anterior:', error);
+            }
+        }
+
+        // Subir nueva imagen a Cloudinary
+        const result = await cloudinary.uploader.upload(req.file.path, {
+            folder: 'farmacia-elizabeth/users',
+            transformation: [{ width: 400, height: 400, crop: 'fill', gravity: 'face' }]
+        });
+
+        // Actualizar usuario con nueva imagen
+        await user.update({
+            profileImage: result.secure_url,
+            cloudinaryPublicId: result.public_id
+        });
+
+        res.status(200).json({
+            message: "Imagen de perfil actualizada exitosamente",
+            profileImage: user.profileImage
+        });
+    } catch (error) {
+        res.status(500).json({
+            message: "Error al actualizar imagen de perfil",
+            error: error.message
+        });
+    }
+};
+
 exports.changePassword = async (req, res) => {
     try {
         const userId = req.user.id;
         const { currentPassword, newPassword } = req.body;
 
-        if (!currentPassword || !newPassword) {
+        if (!newPassword || newPassword.length < 8) {
             return res.status(400).json({
-                message: "Contraseña actual y nueva contraseña son obligatorias"
+                message: "La nueva contraseña debe tener al menos 8 caracteres"
             });
         }
 
@@ -411,22 +466,41 @@ exports.changePassword = async (req, res) => {
             return res.status(404).json({ message: "Usuario no encontrado" });
         }
 
-        if (!user.password) {
-            return res.status(400).json({
-                message: "Esta cuenta fue creada con Google y no tiene contraseña"
+        // CASO 1: Usuario tiene contraseña existente
+        if (user.password) {
+            if (!currentPassword) {
+                return res.status(400).json({
+                    message: "Debe proporcionar su contraseña actual"
+                });
+            }
+
+            const isValidPassword = await user.comparePassword(currentPassword);
+            if (!isValidPassword) {
+                return res.status(401).json({ message: "Contraseña actual incorrecta" });
+            }
+
+            await user.update({ password: newPassword });
+
+            return res.status(200).json({
+                message: "Contraseña actualizada exitosamente"
             });
         }
 
-        const isValidPassword = await user.comparePassword(currentPassword);
-        if (!isValidPassword) {
-            return res.status(401).json({ message: "Contraseña actual incorrecta" });
+        // CASO 2: Usuario de Google sin contraseña (puede establecer una)
+        if (user.googleId && !user.password) {
+            // Permitir establecer contraseña sin requerir la actual
+            await user.update({ password: newPassword });
+
+            return res.status(200).json({
+                message: "Contraseña establecida exitosamente. Ahora puedes iniciar sesión con email y contraseña además de Google"
+            });
         }
 
-        await user.update({ password: newPassword });
-
-        res.status(200).json({
-            message: "Contraseña cambiada exitosamente"
+        // CASO 3: Sin contraseña y sin Google (error inesperado)
+        return res.status(400).json({
+            message: "Estado de cuenta inválido. Contacte al administrador"
         });
+
     } catch (error) {
         res.status(500).json({
             message: "Error al cambiar contraseña",
@@ -502,7 +576,7 @@ exports.getUserById = async (req, res) => {
 
 exports.createUser = async (req, res) => {
     try {
-        const { email, password, firstName, lastName, role, dpi, nit, phone, address, birthDate } = req.body;
+        const { email, password, firstName, lastName, role, dpi, phone, address, birthDate } = req.body;
 
         const validRoles = ['admin', 'vendedor', 'bodega', 'repartidor', 'cliente'];
         if (role && !validRoles.includes(role)) {
@@ -530,11 +604,11 @@ exports.createUser = async (req, res) => {
             lastName,
             role: role || 'cliente',
             dpi,
-            nit,
             phone,
             address,
             birthDate,
             isActive: true
+            // nit: No se usa en sistema local (solo recibos simples, no facturas)
         };
 
         if (req.file) {
@@ -570,7 +644,7 @@ exports.createUser = async (req, res) => {
 exports.updateUser = async (req, res) => {
     try {
         const { id } = req.params;
-        const { email, firstName, lastName, role, dpi, nit, phone, address, birthDate, isActive } = req.body;
+        const { email, firstName, lastName, role, dpi, phone, address, birthDate, isActive } = req.body;
 
         const user = await User.findByPk(id);
         if (!user) {
@@ -610,11 +684,11 @@ exports.updateUser = async (req, res) => {
         if (lastName) updates.lastName = lastName;
         if (role) updates.role = role;
         if (dpi !== undefined) updates.dpi = dpi;
-        if (nit !== undefined) updates.nit = nit;
         if (phone !== undefined) updates.phone = phone;
         if (address !== undefined) updates.address = address;
         if (birthDate !== undefined) updates.birthDate = birthDate;
         if (isActive !== undefined) updates.isActive = isActive;
+        // nit: No se usa en sistema local (solo recibos simples, no facturas)
 
         if (req.file) {
             if (user.cloudinaryPublicId) {

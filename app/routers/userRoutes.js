@@ -30,7 +30,7 @@
 const express = require('express');
 const router = express.Router();
 const upload = require('../config/multerConfig');
-const { 
+const {
     register,
     registerWithGoogle,
     login,
@@ -39,6 +39,7 @@ const {
     googleAuthCallback,
     getProfile,
     updateProfile,
+    updateProfileImage,
     changePassword,
     getAllUsers,
     getUserById,
@@ -117,15 +118,24 @@ router.get('/auth/google/callback', googleAuthCallback);
 router.get('/profile', authMiddleware, getProfile);
 
 /**
- * Actualizar perfil propio
- * Permite cambiar: nombre, teléfono, dirección, imagen
+ * Actualizar perfil propio (campos de texto)
+ * Permite cambiar: firstName, lastName, phone, address, dpi, birthDate
+ * Permite editar campos individuales (no es necesario enviar todos)
  * NO permite cambiar: email, role, password (usar /change-password)
  */
-router.put('/profile', authMiddleware, upload.single('image'), updateProfile);
+router.put('/profile', authMiddleware, updateProfile);
+
+/**
+ * Actualizar solo la imagen de perfil
+ * Sube a Cloudinary y actualiza la URL en la BD
+ * Elimina la imagen anterior si existe
+ */
+router.put('/profile/image', authMiddleware, upload.single('image'), updateProfileImage);
 
 /**
  * Cambiar contraseña propia
- * Requiere contraseña actual para validación
+ * - Si tiene contraseña: requiere contraseña actual
+ * - Si es usuario de Google sin contraseña: puede establecer una nueva
  */
 router.post('/change-password', authMiddleware, changePassword);
 
