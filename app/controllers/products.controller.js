@@ -44,10 +44,12 @@ exports.create = async (req, res) => {
             contraindications
         } = req.body;
 
-        // Validar que el proveedor existe
-        const supplier = await Supplier.findByPk(supplierId);
-        if (!supplier) {
-            return res.status(404).json({ message: "Proveedor no encontrado" });
+        // Validar que el proveedor existe (solo si se proporciona)
+        if (supplierId) {
+            const supplier = await Supplier.findByPk(supplierId);
+            if (!supplier) {
+                return res.status(404).json({ message: "Proveedor no encontrado" });
+            }
         }
 
         // Validar SKU único
@@ -81,7 +83,7 @@ exports.create = async (req, res) => {
             subcategory,
             presentation,
             requiresPrescription: requiresPrescription || false,
-            supplierId,
+            supplierId: supplierId || null,
             price,
             costPrice,
             stock: 0, // Stock inicial en 0, se actualiza con lotes
@@ -392,7 +394,7 @@ exports.update = async (req, res) => {
         if (subcategory !== undefined) updates.subcategory = subcategory;
         if (presentation !== undefined) updates.presentation = presentation;
         if (requiresPrescription !== undefined) updates.requiresPrescription = requiresPrescription;
-        if (supplierId) updates.supplierId = supplierId;
+        if (supplierId !== undefined) updates.supplierId = supplierId;
         if (price) updates.price = price;
         if (costPrice) updates.costPrice = costPrice;
         if (minStock !== undefined) updates.minStock = minStock;

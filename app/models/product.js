@@ -57,11 +57,12 @@ module.exports = (sequelize, DataTypes) => {
     },
     supplierId: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
       references: {
         model: 'suppliers',
         key: 'id'
-      }
+      },
+      comment: 'Proveedor (opcional - se puede agregar después)'
     },
     price: {
       type: DataTypes.DECIMAL(10, 2),

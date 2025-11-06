@@ -41,10 +41,35 @@ exports.createBatch = async (req, res) => {
             return res.status(404).json({ message: "Producto no encontrado" });
         }
 
-        // Validar que el proveedor existe
-        const supplier = await Supplier.findByPk(supplierId);
-        if (!supplier) {
-            return res.status(404).json({ message: "Proveedor no encontrado" });
+        // Validar proveedor según las reglas de negocio
+        if (product.supplierId) {
+            // El producto TIENE proveedor → El lote DEBE tener el MISMO proveedor
+            if (!supplierId) {
+                return res.status(400).json({
+                    message: `El producto tiene asignado el proveedor ID ${product.supplierId}. El lote debe tener el mismo proveedor.`
+                });
+            }
+
+            if (parseInt(supplierId) !== product.supplierId) {
+                return res.status(400).json({
+                    message: `El proveedor del lote (${supplierId}) no coincide con el proveedor del producto (${product.supplierId})`
+                });
+            }
+
+            // Verificar que el proveedor existe
+            const supplier = await Supplier.findByPk(supplierId);
+            if (!supplier) {
+                return res.status(404).json({ message: "Proveedor no encontrado" });
+            }
+        } else {
+            // El producto NO tiene proveedor → El lote puede tener o no tener proveedor (opcional)
+            if (supplierId) {
+                // Si se proporciona proveedor, verificar que existe
+                const supplier = await Supplier.findByPk(supplierId);
+                if (!supplier) {
+                    return res.status(404).json({ message: "Proveedor no encontrado" });
+                }
+            }
         }
 
         // Validar que el número de lote no exista para este producto

@@ -26,11 +26,12 @@ module.exports = (sequelize, DataTypes) => {
     },
     supplierId: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
       references: {
         model: 'suppliers',
         key: 'id'
-      }
+      },
+      comment: 'Proveedor (opcional - productos pueden no tener proveedor)'
     },
     manufacturingDate: {
       type: DataTypes.DATEONLY,
@@ -93,7 +94,7 @@ module.exports = (sequelize, DataTypes) => {
     invoiceNumber: {
       type: DataTypes.STRING(100),
       allowNull: true,
-      comment: 'Numero de factura de compra'
+      comment: 'Numero de factura/recibo de compra (opcional - solo cuando existe documento físico)'
     },
     receiptDate: {
       type: DataTypes.DATE,
