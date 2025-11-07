@@ -44,12 +44,14 @@ const supplierRoutes = require('./app/routers/supplierRoutes');
 const productRoutes = require('./app/routers/productsRoutes');
 const batchRoutes = require('./app/routers/batchRoutes');
 const invoiceRoutes = require('./app/routers/invoiceRoutes');
+const orderRoutes = require('./app/routers/orderRoutes');
 const receiptRoutes = require('./app/routers/receiptRoutes');
 const paymentRoutes = require('./app/routers/paymentRoutes');
 const inventoryMovementRoutes = require('./app/routers/inventoryMovementRoutes');
 const statisticsRoutes = require('./app/routers/statisticsRoutes');
 const alertsRoutes = require('./app/routers/alertsRoutes');
 const auditLogRoutes = require('./app/routers/auditLogRoutes');
+const reportRoutes = require('./app/routers/reportRoutes');
 
 // ========== CONFIGURAR RUTAS ==========
 app.use('/api/users', userRoutes);
@@ -57,12 +59,14 @@ app.use('/api/suppliers', supplierRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/batches', batchRoutes);
 app.use('/api/invoices', invoiceRoutes);
+app.use('/api/orders', orderRoutes);
 app.use('/api/receipts', receiptRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/inventory', inventoryMovementRoutes);
 app.use('/api/statistics', statisticsRoutes);
 app.use('/api/alerts', alertsRoutes);
 app.use('/api/audit', auditLogRoutes);
+app.use('/api/reports', reportRoutes);
 
 // ========== RUTA DE BIENVENIDA ==========
 app.get('/', (req, res) => {
@@ -78,12 +82,14 @@ app.get('/', (req, res) => {
             products: "/api/products",
             batches: "/api/batches",
             invoices: "/api/invoices",
+            orders: "/api/orders",
             receipts: "/api/receipts",
             payments: "/api/payments",
             inventory: "/api/inventory",
             statistics: "/api/statistics",
             alerts: "/api/alerts",
-            audit: "/api/audit"
+            audit: "/api/audit",
+            reports: "/api/reports"
         },
         features: [
             "✅ Gestión de usuarios con Google OAuth",
@@ -93,7 +99,8 @@ app.get('/', (req, res) => {
             "✅ Gestión de proveedores",
             "✅ Alertas automáticas",
             "✅ Auditoría completa",
-            "✅ Reportes y estadísticas"
+            "✅ Reportes y estadísticas",
+            "✅ Módulo de reportes avanzado"
         ]
     });
 });

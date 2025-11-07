@@ -19,6 +19,7 @@ const Invoice = db.Invoice;
 const User = db.User;
 const Payment = db.Payment;
 const { Op } = db.Sequelize;
+const PDFDocument = require('pdfkit');
 
 // ========== CREAR COMPROBANTE ==========
 
@@ -189,6 +190,19 @@ exports.getReceiptById = async (req, res) => {
                             model: User,
                             as: 'seller',
                             attributes: ['id', 'firstName', 'lastName']
+                        },
+                        {
+                            model: db.InvoiceItem,
+                            as: 'items',
+                            attributes: ['id', 'quantity', 'unitPrice', 'total', 'discount'],
+                            include: [
+                                {
+                                    model: db.Product,
+                                    as: 'product',
+                                    attributes: ['id', 'name', 'description']
+                                }
+                            ],
+                            required: false
                         }
                     ]
                 },
@@ -279,11 +293,35 @@ exports.getReceiptsByClient = async (req, res) => {
                 {
                     model: Invoice,
                     as: 'invoice',
-                    attributes: ['id', 'invoiceNumber', 'total', 'invoiceDate']
+                    attributes: ['id', 'invoiceNumber', 'total', 'invoiceDate', 'subtotal', 'discount', 'tax'],
+                    include: [
+                        {
+                            model: db.InvoiceItem,
+                            as: 'items',
+                            attributes: ['id', 'quantity', 'unitPrice', 'total'],
+                            include: [
+                                {
+                                    model: db.Product,
+                                    as: 'product',
+                                    attributes: ['id', 'name']
+                                }
+                            ],
+                            required: false
+                        }
+                    ]
                 }
             ],
             order: [['issueDate', 'DESC']],
             limit: parseInt(limit)
+        });
+
+        // Calcular totales
+        const totalGastado = receipts.reduce((sum, receipt) => {
+            return sum + parseFloat(receipt.amount || 0);
+        }, 0);
+
+        const totalPedidos = await Invoice.count({
+            where: { clientId }
         });
 
         res.status(200).json({
@@ -293,7 +331,13 @@ exports.getReceiptsByClient = async (req, res) => {
                 email: client.email
             },
             count: receipts.length,
-            receipts
+            receipts,
+            // Totales agregados
+            totals: {
+                totalGastado: parseFloat(totalGastado.toFixed(2)),
+                totalRecibos: receipts.length,
+                totalPedidos: totalPedidos
+            }
         });
     } catch (error) {
         res.status(500).json({
@@ -549,6 +593,17 @@ exports.generateReceiptPDF = async (req, res) => {
                             model: User,
                             as: 'seller',
                             attributes: ['firstName', 'lastName']
+                        },
+                        {
+                            model: db.InvoiceItem,
+                            as: 'items',
+                            include: [
+                                {
+                                    model: db.Product,
+                                    as: 'product',
+                                    attributes: ['id', 'name', 'description']
+                                }
+                            ]
                         }
                     ]
                 },
@@ -564,33 +619,172 @@ exports.generateReceiptPDF = async (req, res) => {
             return res.status(404).json({ message: "Comprobante no encontrado" });
         }
 
-        // TODO: Implementar generación de PDF con PDFKit o similar
-        // Por ahora devolvemos la estructura de datos que se usaría
-        const pdfData = {
-            receiptNumber: receipt.receiptNumber,
-            issueDate: receipt.issueDate,
-            amount: receipt.amount,
-            currency: receipt.currency,
-            paymentMethod: receipt.paymentMethod,
-            invoice: {
-                invoiceNumber: receipt.invoice.invoiceNumber,
-                total: receipt.invoice.total
-            },
-            client: receipt.client ? {
-                name: `${receipt.client.firstName} ${receipt.client.lastName}`,
-                dpi: receipt.client.dpi,
-                nit: receipt.client.nit
-            } : null,
-            issuedBy: receipt.issuedBy
-        };
+        // Validar que el recibo tenga invoice e items
+        if (!receipt.invoice) {
+            return res.status(400).json({
+                message: "Este recibo no tiene una venta asociada y no puede generar PDF"
+            });
+        }
 
-        res.status(200).json({
-            message: "Datos del comprobante para PDF",
-            pdfData,
-            note: "Implementar generación de PDF con PDFKit"
+        if (!receipt.invoice.items || receipt.invoice.items.length === 0) {
+            return res.status(400).json({
+                message: "Este recibo no tiene productos asociados y no puede generar PDF"
+            });
+        }
+
+        // Crear documento PDF
+        const doc = new PDFDocument({ size: 'letter', margin: 50 });
+
+        // Configurar headers para descarga
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=Recibo-${receipt.receiptNumber}.pdf`);
+
+        // Pipe del PDF a la respuesta
+        doc.pipe(res);
+
+        // ========== ENCABEZADO ==========
+        doc.fontSize(20).font('Helvetica-Bold').text('FARMACIA ELIZABETH', { align: 'center' });
+        doc.fontSize(10).font('Helvetica').text('Rabinal, Baja Verapaz, Guatemala', { align: 'center' });
+        doc.moveDown();
+        doc.fontSize(16).font('Helvetica-Bold').text('COMPROBANTE DE PAGO', { align: 'center' });
+        doc.moveDown();
+
+        // ========== INFORMACIÓN DEL RECIBO ==========
+        const startY = doc.y;
+
+        doc.fontSize(10).font('Helvetica-Bold').text('No. Recibo:', 50, startY);
+        doc.font('Helvetica').text(receipt.receiptNumber, 150, startY);
+
+        doc.font('Helvetica-Bold').text('Fecha de Emisión:', 50, startY + 15);
+        doc.font('Helvetica').text(new Date(receipt.issueDate).toLocaleString('es-GT'), 150, startY + 15);
+
+        doc.font('Helvetica-Bold').text('No. Venta:', 50, startY + 30);
+        doc.font('Helvetica').text(receipt.invoice.invoiceNumber, 150, startY + 30);
+
+        doc.font('Helvetica-Bold').text('Método de Pago:', 50, startY + 45);
+        doc.font('Helvetica').text(receipt.paymentMethod.toUpperCase(), 150, startY + 45);
+
+        doc.font('Helvetica-Bold').text('Estado:', 50, startY + 60);
+        doc.font('Helvetica').text(receipt.status.toUpperCase(), 150, startY + 60);
+
+        doc.moveDown(5);
+
+        // ========== INFORMACIÓN DEL CLIENTE ==========
+        if (receipt.client) {
+            doc.fontSize(12).font('Helvetica-Bold').text('CLIENTE:', { underline: true });
+            doc.fontSize(10).font('Helvetica');
+            doc.text(`Nombre: ${receipt.client.firstName} ${receipt.client.lastName}`);
+            if (receipt.client.dpi) doc.text(`DPI: ${receipt.client.dpi}`);
+            if (receipt.client.email) doc.text(`Email: ${receipt.client.email}`);
+            if (receipt.client.phone) doc.text(`Teléfono: ${receipt.client.phone}`);
+            doc.moveDown();
+        }
+
+        // ========== LÍNEA SEPARADORA ==========
+        doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+        doc.moveDown();
+
+        // ========== DETALLE DE PRODUCTOS ==========
+        doc.fontSize(12).font('Helvetica-Bold').text('DETALLE DE PRODUCTOS', { underline: true });
+        doc.moveDown(0.5);
+
+        const tableTop = doc.y;
+        const colProducto = 50;
+        const colCantidad = 320;
+        const colPrecio = 400;
+        const colSubtotal = 480;
+
+        doc.fontSize(9);
+        doc.font('Helvetica-Bold');
+        doc.text('Producto', colProducto, tableTop);
+        doc.text('Cant.', colCantidad, tableTop);
+        doc.text('Precio', colPrecio, tableTop);
+        doc.text('Subtotal', colSubtotal, tableTop);
+
+        doc.moveTo(50, tableTop + 15).lineTo(550, tableTop + 15).stroke();
+
+        let currentY = tableTop + 25;
+        doc.font('Helvetica').fontSize(9);
+
+        // Iterar sobre los items del pedido
+        receipt.invoice.items.forEach((item, index) => {
+            const productName = item.product ? item.product.name : 'Producto desconocido';
+            const quantity = item.quantity;
+            const unitPrice = parseFloat(item.unitPrice).toFixed(2);
+            const subtotal = parseFloat(item.total).toFixed(2);
+
+            // Si el nombre es muy largo, truncarlo
+            const truncatedName = productName.length > 35
+                ? productName.substring(0, 32) + '...'
+                : productName;
+
+            doc.text(truncatedName, colProducto, currentY, { width: 260 });
+            doc.text(quantity.toString(), colCantidad, currentY);
+            doc.text(`Q${unitPrice}`, colPrecio, currentY);
+            doc.text(`Q${subtotal}`, colSubtotal, currentY);
+
+            currentY += 20;
+
+            // Si llegamos al final de la página, crear nueva página
+            if (currentY > 700) {
+                doc.addPage();
+                currentY = 50;
+            }
         });
 
+        doc.moveDown(2);
+
+        // ========== TOTALES ==========
+        doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+        doc.moveDown(0.5);
+
+        const totalsStartY = doc.y;
+        doc.fontSize(10).font('Helvetica');
+
+        // Subtotal
+        doc.text('Subtotal:', 350, totalsStartY);
+        doc.text(`${receipt.currency} ${parseFloat(receipt.invoice.subtotal).toFixed(2)}`, 450, totalsStartY, { align: 'right' });
+
+        // Descuento (si existe)
+        if (receipt.invoice.discount && parseFloat(receipt.invoice.discount) > 0) {
+            doc.text('Descuento:', 350, totalsStartY + 15);
+            doc.text(`- ${receipt.currency} ${parseFloat(receipt.invoice.discount).toFixed(2)}`, 450, totalsStartY + 15, { align: 'right' });
+        }
+
+        // Impuesto (si existe)
+        if (receipt.invoice.tax && parseFloat(receipt.invoice.tax) > 0) {
+            doc.text('IVA:', 350, totalsStartY + 30);
+            doc.text(`${receipt.currency} ${parseFloat(receipt.invoice.tax).toFixed(2)}`, 450, totalsStartY + 30, { align: 'right' });
+        }
+
+        // Línea separadora antes del total
+        const totalLineY = totalsStartY + 45;
+        doc.moveTo(350, totalLineY).lineTo(550, totalLineY).stroke();
+
+        // TOTAL
+        const totalY = totalLineY + 10;
+        doc.fontSize(14).font('Helvetica-Bold').text('TOTAL:', 350, totalY);
+        doc.fontSize(16).text(`${receipt.currency} ${parseFloat(receipt.amount).toFixed(2)}`, 450, totalY, { align: 'right' });
+
+        doc.moveDown(3);
+
+        // ========== PIE DE PÁGINA ==========
+        doc.fontSize(8).font('Helvetica-Oblique').text(
+            `Emitido por: ${receipt.issuedBy || 'Sistema'}`,
+            50,
+            doc.y,
+            { align: 'center' }
+        );
+
+        doc.moveDown(0.5);
+        doc.text('Gracias por su compra', { align: 'center' });
+        doc.text('Farmacia Elizabeth - Rabinal, Baja Verapaz', { align: 'center' });
+
+        // Finalizar el PDF
+        doc.end();
+
     } catch (error) {
+        console.error('Error al generar PDF:', error);
         res.status(500).json({
             message: "Error al generar PDF",
             error: error.message

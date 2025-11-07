@@ -39,6 +39,8 @@ db.Product = require('../models/product.js')(sequelize, Sequelize);
 db.Batch = require('../models/batch.js')(sequelize, Sequelize);
 db.Invoice = require('../models/invoice.js')(sequelize, Sequelize);
 db.InvoiceItem = require('../models/invoiceItem.js')(sequelize, Sequelize);
+db.Order = require('../models/order.js')(sequelize, Sequelize);
+db.OrderItem = require('../models/orderItem.js')(sequelize, Sequelize);
 db.InventoryMovement = require('../models/inventoryMovement.js')(sequelize, Sequelize);
 db.AuditLog = require('../models/auditLog.js')(sequelize, Sequelize);
 db.Receipt = require('../models/receipt.js')(sequelize, Sequelize);
@@ -222,16 +224,115 @@ db.Receipt.belongsTo(db.Payment, {
   as: 'payment' 
 });
 
+// ========== RELACIONES DE PEDIDOS EN LÍNEA ==========
+
+// User (Cliente) -> Orders
+db.User.hasMany(db.Order, {
+  foreignKey: 'clientId',
+  as: 'ordersAsClient'
+});
+db.Order.belongsTo(db.User, {
+  foreignKey: 'clientId',
+  as: 'client'
+});
+
+// User (Vendedor) -> Orders
+db.User.hasMany(db.Order, {
+  foreignKey: 'sellerId',
+  as: 'ordersAsSeller'
+});
+db.Order.belongsTo(db.User, {
+  foreignKey: 'sellerId',
+  as: 'seller'
+});
+
+// User (Repartidor) -> Orders
+db.User.hasMany(db.Order, {
+  foreignKey: 'deliveryPersonId',
+  as: 'ordersAsDeliveryPerson'
+});
+db.Order.belongsTo(db.User, {
+  foreignKey: 'deliveryPersonId',
+  as: 'deliveryPerson'
+});
+
+// User (Coordinador de Ventas) -> Orders
+db.User.hasMany(db.Order, {
+  foreignKey: 'salesCoordinatorId',
+  as: 'ordersAsCoordinator'
+});
+db.Order.belongsTo(db.User, {
+  foreignKey: 'salesCoordinatorId',
+  as: 'salesCoordinator'
+});
+
+// Invoice -> Order (relación inversa: un pedido genera una factura)
+db.Invoice.hasOne(db.Order, {
+  foreignKey: 'invoiceId',
+  as: 'order'
+});
+db.Order.belongsTo(db.Invoice, {
+  foreignKey: 'invoiceId',
+  as: 'invoice'
+});
+
+// Order -> OrderItems
+db.Order.hasMany(db.OrderItem, {
+  foreignKey: 'orderId',
+  as: 'items',
+  onDelete: 'CASCADE'
+});
+db.OrderItem.belongsTo(db.Order, {
+  foreignKey: 'orderId',
+  as: 'order'
+});
+
+// Product -> OrderItems
+db.Product.hasMany(db.OrderItem, {
+  foreignKey: 'productId',
+  as: 'orderItems'
+});
+db.OrderItem.belongsTo(db.Product, {
+  foreignKey: 'productId',
+  as: 'product'
+});
+
+// Batch -> OrderItems
+db.Batch.hasMany(db.OrderItem, {
+  foreignKey: 'batchId',
+  as: 'orderItems'
+});
+db.OrderItem.belongsTo(db.Batch, {
+  foreignKey: 'batchId',
+  as: 'batch'
+});
+
 // ========== RELACIONES DE AUDITORIA ==========
 
-db.User.hasMany(db.AuditLog, { 
-  foreignKey: 'userId', 
+db.User.hasMany(db.AuditLog, {
+  foreignKey: 'userId',
   as: 'auditLogs'
 });
-db.AuditLog.belongsTo(db.User, { 
-  foreignKey: 'userId', 
-  as: 'user' 
+db.AuditLog.belongsTo(db.User, {
+  foreignKey: 'userId',
+  as: 'user'
 });
+
+// ========== EXPORTACIONES ALTERNATIVAS (para compatibilidad con reportes) ==========
+
+db.users = db.User;
+db.suppliers = db.Supplier;
+db.supplierPayments = db.SupplierPayment;
+db.products = db.Product;
+db.batches = db.Batch;
+db.invoices = db.Invoice;
+db.invoiceItems = db.InvoiceItem;
+db.orders = db.Order;
+db.orderItems = db.OrderItem;
+db.inventoryMovements = db.InventoryMovement;
+db.auditLogs = db.AuditLog;
+db.receipts = db.Receipt;
+db.payments = db.Payment;
 
 // ========== FUNCIONES AUXILIARES ==========
 

@@ -16,13 +16,13 @@ const env = require('./app/config/env');
 const CONFIG = {
     // ⚙️ SINCRONIZAR BD: true = Actualiza estructura (sin borrar datos)
     SYNC_DATABASE: false,
-    
+
     // 🔄 RECREAR TABLAS: true = Elimina y recrea todas las tablas (BORRA DATOS)
     RECREATE_TABLES: false,  // ⚠️ PELIGROSO: Cambia a true solo para desarrollo
-    
+
     // 👥 INSERTAR USUARIOS: true = Crea usuarios por defecto si no existen
     CREATE_DEFAULT_USERS: false,
-    
+
     // 📦 INSERTAR DATOS DE PRUEBA: true = Crea productos y lotes de ejemplo
     CREATE_SAMPLE_DATA: false
 };
@@ -230,12 +230,14 @@ async function startServer() {
         console.log('   • /api/products - Gestión de productos');
         console.log('   • /api/batches - Gestión de lotes');
         console.log('   • /api/invoices - Recibos de venta');
+        console.log('   • /api/orders - Pedidos en línea');
         console.log('   • /api/receipts - Comprobantes');
         console.log('   • /api/payments - Pagos Stripe');
         console.log('   • /api/inventory - Movimientos inventario');
         console.log('   • /api/statistics - Reportes y estadísticas');
         console.log('   • /api/alerts - Alertas del sistema');
-        console.log('   • /api/audit - Logs de auditoría\n');
+        console.log('   • /api/audit - Logs de auditoría');
+        console.log('   • /api/reports - Módulo de reportes completo 📊\n');
 
         console.log('💡 Ambiente: ' + env.nodeEnv.toUpperCase());
         console.log('🔐 JWT configurado: ' + (env.jwtSecret ? '✅' : '❌'));

@@ -15,7 +15,7 @@
  * @param {string|string[]} allowedRoles - Rol o array de roles permitidos
  * @returns {Function} Middleware
  */
-const roleMiddleware = (...allowedRoles) => {
+const roleMiddleware = (allowedRoles) => {
     return (req, res, next) => {
         try {
             // Verificar que el usuario esté autenticado
@@ -32,14 +32,29 @@ const roleMiddleware = (...allowedRoles) => {
                 });
             }
 
+            // Convertir allowedRoles a array si es un string
+            const rolesArray = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+
             // Verificar que el rol del usuario esté en la lista de roles permitidos
-            if (!allowedRoles.includes(req.user.role)) {
+            console.log('🔍 [ROLE MIDDLEWARE] Verificando permisos:', {
+                endpoint: req.originalUrl,
+                method: req.method,
+                allowedRoles: rolesArray,
+                userRole: req.user.role,
+                userId: req.user.id,
+                match: rolesArray.includes(req.user.role)
+            });
+
+            if (!rolesArray.includes(req.user.role)) {
+                console.log('❌ [ROLE MIDDLEWARE] Acceso denegado');
                 return res.status(403).json({
                     message: "No tienes permisos para acceder a este recurso",
-                    requiredRoles: allowedRoles,
+                    requiredRoles: rolesArray,
                     yourRole: req.user.role
                 });
             }
+
+            console.log('✅ [ROLE MIDDLEWARE] Acceso permitido');
 
             // Usuario autorizado
             next();
