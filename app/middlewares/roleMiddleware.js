@@ -15,7 +15,7 @@
  * @param {string|string[]} allowedRoles - Rol o array de roles permitidos
  * @returns {Function} Middleware
  */
-const roleMiddleware = (allowedRoles) => {
+const roleMiddleware = (...allowedRoles) => {
     return (req, res, next) => {
         try {
             // Verificar que el usuario esté autenticado
@@ -32,8 +32,8 @@ const roleMiddleware = (allowedRoles) => {
                 });
             }
 
-            // Convertir allowedRoles a array si es un string
-            const rolesArray = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+            // Convertir allowedRoles a array plano (puede venir como array de arrays o strings)
+            const rolesArray = allowedRoles.flat();
 
             // Verificar que el rol del usuario esté en la lista de roles permitidos
             console.log('🔍 [ROLE MIDDLEWARE] Verificando permisos:', {

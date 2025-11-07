@@ -12,6 +12,16 @@ const Receipt = db.receipts;
 const Batch = db.batches;
 const AuditLog = db.auditLogs;
 
+// Generadores de reportes para descargas
+const {
+  generateSalesExcel,
+  generateEconomicAnalysisExcel,
+  generateBestSalesDaysExcel,
+  generateSalesPDF,
+  generateEconomicAnalysisPDF,
+  generateBestSalesDaysPDF
+} = require('../utils/reportGenerators');
+
 // ==================== DASHBOARD GENERAL ====================
 
 /**
@@ -1322,13 +1332,13 @@ exports.getBestSalesDays = async (req, res) => {
           WHEN EXTRACT(DAY FROM "createdAt") <= 14 THEN 'Segunda semana'
           WHEN EXTRACT(DAY FROM "createdAt") <= 21 THEN 'Tercera semana'
           ELSE 'Última semana'
-        END as semana_nombre,
+        END as semana,
         COUNT(id) as total_transacciones,
         SUM(total) as total_ventas,
         AVG(total) as promedio_ticket
       FROM invoices
       ${Object.keys(where).length > 0 ? 'WHERE "createdAt" BETWEEN :startDate AND :endDate' : ''}
-      GROUP BY semana_numero, semana_nombre
+      GROUP BY semana_numero, semana
       ORDER BY total_ventas DESC
     `, {
       replacements: {
@@ -1389,7 +1399,7 @@ exports.getBestSalesDays = async (req, res) => {
         promedioTicket: parseFloat(h.promedio_ticket).toFixed(2)
       })),
       mejorSemanaMes: bestWeekOfMonth.map(s => ({
-        semana: s.semana_nombre,
+        semana: s.semana,
         totalVentas: parseFloat(s.total_ventas).toFixed(2),
         totalTransacciones: parseInt(s.total_transacciones),
         promedioTicket: parseFloat(s.promedio_ticket).toFixed(2)
@@ -1442,7 +1452,7 @@ function generateRecommendations(daysOfWeek, daysOfMonth, hoursOfDay, weeksOfMon
     const bestWeek = weeksOfMonth[0];
     recommendations.push({
       tipo: 'Semana del mes',
-      mensaje: `La ${bestWeek.semana_nombre.toLowerCase()} del mes es la más fuerte en ventas. Planifica inventario y promociones acorde.`,
+      mensaje: `La ${bestWeek.semana.toLowerCase()} del mes es la más fuerte en ventas. Planifica inventario y promociones acorde.`,
       impacto: 'medio'
     });
   }
@@ -1488,15 +1498,6 @@ function getStockStatus(stock, minStock) {
 }
 
 // ==================== DESCARGA DE REPORTES ====================
-
-const {
-  generateSalesExcel,
-  generateEconomicAnalysisExcel,
-  generateBestSalesDaysExcel,
-  generateSalesPDF,
-  generateEconomicAnalysisPDF,
-  generateBestSalesDaysPDF
-} = require('../utils/reportGenerators');
 
 /**
  * Descarga reporte de ventas en Excel o PDF
@@ -1729,25 +1730,33 @@ exports.downloadEconomicAnalysis = async (req, res) => {
     const topProductos = await InvoiceItem.findAll({
       attributes: [
         'productId',
-        [Sequelize.fn('SUM', Sequelize.col('quantity')), 'cantidadVendida'],
-        [Sequelize.fn('SUM', Sequelize.literal('quantity * price')), 'ingresos']
+        [Sequelize.fn('SUM', Sequelize.col('InvoiceItem.quantity')), 'cantidadVendida'],
+        [Sequelize.fn('SUM', Sequelize.literal('"InvoiceItem"."quantity" * "InvoiceItem"."unitPrice"')), 'ingresos']
       ],
-      include: [{
-        model: Product,
-        attributes: ['name', 'category']
-      }],
-      where: {
-        createdAt: { [Op.between]: [inicio, fin] }
-      },
-      group: ['InvoiceItem.productId', 'Product.id'],
-      order: [[Sequelize.fn('SUM', Sequelize.literal('quantity * price')), 'DESC']],
+      include: [
+        {
+          model: Product,
+          as: 'product',
+          attributes: ['name', 'category']
+        },
+        {
+          model: Invoice,
+          as: 'invoice',
+          attributes: [],
+          where: {
+            createdAt: { [Op.between]: [inicio, fin] }
+          }
+        }
+      ],
+      group: ['InvoiceItem.productId', 'product.id'],
+      order: [[Sequelize.fn('SUM', Sequelize.literal('"InvoiceItem"."quantity" * "InvoiceItem"."unitPrice"')), 'DESC']],
       limit: 10,
       raw: true
     });
 
     const topProductosFormateados = topProductos.map(item => ({
-      nombre: item['Product.name'] || 'N/A',
-      categoria: item['Product.category'] || 'N/A',
+      nombre: item['product.name'] || 'N/A',
+      categoria: item['product.category'] || 'N/A',
       cantidadVendida: item.cantidadVendida,
       ingresos: parseFloat(item.ingresos).toFixed(2)
     }));
