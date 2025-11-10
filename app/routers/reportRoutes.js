@@ -151,6 +151,20 @@ router.get(
   reportsController.getBestSalesDays
 );
 
+/**
+ * Análisis completo por períodos de tiempo con datos detallados
+ * GET /api/reports/time-period-analysis
+ * Query params: startDate, endDate (opcional, por defecto últimos 90 días)
+ * Devuelve análisis completo por hora, día, semana, mes, trimestre, semestre y año
+ * con los top 5 períodos de cada categoría y resúmenes estadísticos
+ * Acceso: Admin, Empleado
+ */
+router.get(
+  '/time-period-analysis',
+  [authMiddleware, roleMiddleware(['admin', 'empleado'])],
+  reportsController.getTimePeriodAnalysis
+);
+
 // ==================== DESCARGA DE REPORTES ====================
 
 /**
@@ -187,6 +201,22 @@ router.get(
   '/download/best-sales-days',
   [authMiddleware, roleMiddleware(['admin', 'empleado'])],
   reportsController.downloadBestSalesDays
+);
+
+/**
+ * Descarga ventas completas detalladas en Excel o PDF
+ * GET /api/reports/download/sales-complete?format=excel|pdf&period=today|this-week|this-month|...
+ * Query params:
+ *   - format (excel|pdf)
+ *   - period (today|yesterday|this-week|last-week|this-month|last-month|this-quarter|last-quarter|this-semester|last-semester|this-year|last-year|last-7-days|last-30-days|last-90-days)
+ *   - startDate (alternativa a period)
+ *   - endDate (alternativa a period)
+ * Acceso: Admin
+ */
+router.get(
+  '/download/sales-complete',
+  [authMiddleware, roleMiddleware(['admin'])],
+  reportsController.downloadSalesComplete
 );
 
 module.exports = router;

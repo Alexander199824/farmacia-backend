@@ -1420,39 +1420,55 @@ exports.getBestSalesDays = async (req, res) => {
 function generateRecommendations(daysOfWeek, daysOfMonth, hoursOfDay, weeksOfMonth) {
   const recommendations = [];
 
-  if (daysOfWeek && daysOfWeek.length > 0) {
-    const bestDay = daysOfWeek[0];
-    const worstDay = daysOfWeek[daysOfWeek.length - 1];
+  try {
+    if (daysOfWeek && daysOfWeek.length > 0) {
+      const bestDay = daysOfWeek[0];
+      const worstDay = daysOfWeek[daysOfWeek.length - 1];
 
-    recommendations.push({
-      tipo: 'Día de la semana',
-      mensaje: `${bestDay.dia_nombre} es tu mejor día con Q${parseFloat(bestDay.total_ventas).toFixed(2)} en ventas. Considera aumentar el personal y stock este día.`,
-      impacto: 'alto'
-    });
+      if (bestDay && bestDay.dia_nombre && bestDay.total_ventas) {
+        recommendations.push({
+          tipo: 'Día de la semana',
+          mensaje: `${bestDay.dia_nombre} es tu mejor día con Q${parseFloat(bestDay.total_ventas).toFixed(2)} en ventas. Considera aumentar el personal y stock este día.`,
+          impacto: 'alto'
+        });
+      }
 
-    if (worstDay) {
-      recommendations.push({
-        tipo: 'Día de menor venta',
-        mensaje: `${worstDay.dia_nombre} tiene las ventas más bajas. Considera promociones especiales para aumentar el tráfico.`,
-        impacto: 'medio'
-      });
+      if (worstDay && worstDay.dia_nombre) {
+        recommendations.push({
+          tipo: 'Día de menor venta',
+          mensaje: `${worstDay.dia_nombre} tiene las ventas más bajas. Considera promociones especiales para aumentar el tráfico.`,
+          impacto: 'medio'
+        });
+      }
     }
-  }
 
-  if (hoursOfDay && hoursOfDay.length > 0) {
-    const bestHour = hoursOfDay[0];
-    recommendations.push({
-      tipo: 'Hora pico',
-      mensaje: `Las ${parseInt(bestHour.hora)}:00 es tu hora pico. Asegúrate de tener suficiente personal durante este horario.`,
-      impacto: 'alto'
-    });
-  }
+    if (hoursOfDay && hoursOfDay.length > 0) {
+      const bestHour = hoursOfDay[0];
+      if (bestHour && bestHour.hora !== undefined) {
+        recommendations.push({
+          tipo: 'Hora pico',
+          mensaje: `Las ${parseInt(bestHour.hora)}:00 es tu hora pico. Asegúrate de tener suficiente personal durante este horario.`,
+          impacto: 'alto'
+        });
+      }
+    }
 
-  if (weeksOfMonth && weeksOfMonth.length > 0) {
-    const bestWeek = weeksOfMonth[0];
+    if (weeksOfMonth && weeksOfMonth.length > 0) {
+      const bestWeek = weeksOfMonth[0];
+      if (bestWeek && bestWeek.semana) {
+        recommendations.push({
+          tipo: 'Semana del mes',
+          mensaje: `La ${bestWeek.semana.toLowerCase()} del mes es la más fuerte en ventas. Planifica inventario y promociones acorde.`,
+          impacto: 'medio'
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error generando recomendaciones:', error);
+    // Devolver al menos una recomendación genérica
     recommendations.push({
-      tipo: 'Semana del mes',
-      mensaje: `La ${bestWeek.semana.toLowerCase()} del mes es la más fuerte en ventas. Planifica inventario y promociones acorde.`,
+      tipo: 'General',
+      mensaje: 'Analiza tus datos de ventas para identificar patrones y optimizar tu negocio.',
       impacto: 'medio'
     });
   }
@@ -1495,6 +1511,178 @@ function getStockStatus(stock, minStock) {
   if (stock <= minStock) return 'low';
   if (stock > minStock && stock < minStock * 2) return 'normal';
   return 'high';
+}
+
+/**
+ * Calcula el rango de fechas según el período solicitado
+ */
+function calculatePeriodRange(period) {
+  const endDate = new Date();
+  let startDate = new Date();
+
+  switch (period) {
+    case 'today':
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+      break;
+
+    case 'yesterday':
+      startDate.setDate(startDate.getDate() - 1);
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setDate(endDate.getDate() - 1);
+      endDate.setHours(23, 59, 59, 999);
+      break;
+
+    case 'this-week':
+      const dayOfWeek = startDate.getDay();
+      const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Lunes es el primer día
+      startDate.setDate(startDate.getDate() - diff);
+      startDate.setHours(0, 0, 0, 0);
+      break;
+
+    case 'last-week':
+      const lastWeekEnd = new Date();
+      const lastWeekDayOfWeek = lastWeekEnd.getDay();
+      const lastWeekDiff = lastWeekDayOfWeek === 0 ? 6 : lastWeekDayOfWeek - 1;
+      lastWeekEnd.setDate(lastWeekEnd.getDate() - lastWeekDiff - 1);
+      lastWeekEnd.setHours(23, 59, 59, 999);
+      startDate = new Date(lastWeekEnd);
+      startDate.setDate(startDate.getDate() - 6);
+      startDate.setHours(0, 0, 0, 0);
+      return { startDate, endDate: lastWeekEnd };
+
+    case 'this-month':
+      startDate = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+      startDate.setHours(0, 0, 0, 0);
+      break;
+
+    case 'last-month':
+      startDate = new Date(endDate.getFullYear(), endDate.getMonth() - 1, 1);
+      startDate.setHours(0, 0, 0, 0);
+      const lastMonthEnd = new Date(endDate.getFullYear(), endDate.getMonth(), 0);
+      lastMonthEnd.setHours(23, 59, 59, 999);
+      return { startDate, endDate: lastMonthEnd };
+
+    case 'this-quarter':
+      const currentQuarter = Math.floor(endDate.getMonth() / 3);
+      startDate = new Date(endDate.getFullYear(), currentQuarter * 3, 1);
+      startDate.setHours(0, 0, 0, 0);
+      break;
+
+    case 'last-quarter':
+      const lastQuarter = Math.floor(endDate.getMonth() / 3) - 1;
+      const quarterYear = lastQuarter < 0 ? endDate.getFullYear() - 1 : endDate.getFullYear();
+      const quarterMonth = lastQuarter < 0 ? 9 : lastQuarter * 3;
+      startDate = new Date(quarterYear, quarterMonth, 1);
+      startDate.setHours(0, 0, 0, 0);
+      const lastQuarterEnd = new Date(quarterYear, quarterMonth + 3, 0);
+      lastQuarterEnd.setHours(23, 59, 59, 999);
+      return { startDate, endDate: lastQuarterEnd };
+
+    case 'this-semester':
+      const currentSemester = Math.floor(endDate.getMonth() / 6);
+      startDate = new Date(endDate.getFullYear(), currentSemester * 6, 1);
+      startDate.setHours(0, 0, 0, 0);
+      break;
+
+    case 'last-semester':
+      const lastSemester = Math.floor(endDate.getMonth() / 6) - 1;
+      const semesterYear = lastSemester < 0 ? endDate.getFullYear() - 1 : endDate.getFullYear();
+      const semesterMonth = lastSemester < 0 ? 6 : lastSemester * 6;
+      startDate = new Date(semesterYear, semesterMonth, 1);
+      startDate.setHours(0, 0, 0, 0);
+      const lastSemesterEnd = new Date(semesterYear, semesterMonth + 6, 0);
+      lastSemesterEnd.setHours(23, 59, 59, 999);
+      return { startDate, endDate: lastSemesterEnd };
+
+    case 'this-year':
+      startDate = new Date(endDate.getFullYear(), 0, 1);
+      startDate.setHours(0, 0, 0, 0);
+      break;
+
+    case 'last-year':
+      startDate = new Date(endDate.getFullYear() - 1, 0, 1);
+      startDate.setHours(0, 0, 0, 0);
+      const lastYearEnd = new Date(endDate.getFullYear() - 1, 11, 31);
+      lastYearEnd.setHours(23, 59, 59, 999);
+      return { startDate, endDate: lastYearEnd };
+
+    case 'last-7-days':
+      startDate.setDate(startDate.getDate() - 7);
+      startDate.setHours(0, 0, 0, 0);
+      break;
+
+    case 'last-30-days':
+      startDate.setDate(startDate.getDate() - 30);
+      startDate.setHours(0, 0, 0, 0);
+      break;
+
+    case 'last-90-days':
+      startDate.setDate(startDate.getDate() - 90);
+      startDate.setHours(0, 0, 0, 0);
+      break;
+
+    default:
+      // Por defecto, este mes
+      startDate = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+      startDate.setHours(0, 0, 0, 0);
+  }
+
+  return { startDate, endDate };
+}
+
+/**
+ * Obtiene una etiqueta legible para el período
+ */
+function getPeriodLabel(period, startDate, endDate) {
+  const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+  if (!period) {
+    return `${startDate.toLocaleDateString('es-GT')} - ${endDate.toLocaleDateString('es-GT')}`;
+  }
+
+  const year = endDate.getFullYear();
+  const month = months[endDate.getMonth()];
+
+  switch (period) {
+    case 'today':
+      return `Hoy (${endDate.toLocaleDateString('es-GT')})`;
+    case 'yesterday':
+      return `Ayer (${startDate.toLocaleDateString('es-GT')})`;
+    case 'this-week':
+      return `Esta Semana (${startDate.toLocaleDateString('es-GT')} - ${endDate.toLocaleDateString('es-GT')})`;
+    case 'last-week':
+      return `Semana Pasada (${startDate.toLocaleDateString('es-GT')} - ${endDate.toLocaleDateString('es-GT')})`;
+    case 'this-month':
+      return `${month} ${year}`;
+    case 'last-month':
+      return `${months[startDate.getMonth()]} ${startDate.getFullYear()}`;
+    case 'this-quarter':
+      const q = Math.floor(endDate.getMonth() / 3) + 1;
+      return `Trimestre ${q} de ${year}`;
+    case 'last-quarter':
+      const lq = Math.floor(startDate.getMonth() / 3) + 1;
+      return `Trimestre ${lq} de ${startDate.getFullYear()}`;
+    case 'this-semester':
+      const s = Math.floor(endDate.getMonth() / 6) + 1;
+      return `Semestre ${s} de ${year}`;
+    case 'last-semester':
+      const ls = Math.floor(startDate.getMonth() / 6) + 1;
+      return `Semestre ${ls} de ${startDate.getFullYear()}`;
+    case 'this-year':
+      return `Año ${year}`;
+    case 'last-year':
+      return `Año ${year - 1}`;
+    case 'last-7-days':
+      return 'Últimos 7 días';
+    case 'last-30-days':
+      return 'Últimos 30 días';
+    case 'last-90-days':
+      return 'Últimos 90 días';
+    default:
+      return `${startDate.toLocaleDateString('es-GT')} - ${endDate.toLocaleDateString('es-GT')}`;
+  }
 }
 
 // ==================== DESCARGA DE REPORTES ====================
@@ -1819,6 +2007,201 @@ exports.downloadEconomicAnalysis = async (req, res) => {
 };
 
 /**
+ * Descarga ventas completas detalladas con todos los datos
+ * GET /api/reports/download/sales-complete?format=excel|pdf&period=today|this-week|this-month|...
+ */
+exports.downloadSalesComplete = async (req, res) => {
+  try {
+    const { format = 'excel', period, startDate, endDate } = req.query;
+
+    // Calcular fechas según el período
+    let inicio, fin;
+
+    if (period) {
+      const dateRange = calculatePeriodRange(period);
+      inicio = dateRange.startDate;
+      fin = dateRange.endDate;
+    } else if (startDate && endDate) {
+      inicio = new Date(startDate);
+      fin = new Date(endDate);
+    } else {
+      // Por defecto, este mes
+      fin = new Date();
+      inicio = new Date(fin.getFullYear(), fin.getMonth(), 1);
+    }
+
+    // Obtener todas las ventas detalladas del período
+    const ventas = await Invoice.findAll({
+      where: {
+        createdAt: { [Op.between]: [inicio, fin] }
+      },
+      include: [
+        {
+          model: User,
+          as: 'client',
+          attributes: ['id', 'firstName', 'lastName', 'email', 'nit']
+        },
+        {
+          model: User,
+          as: 'seller',
+          attributes: ['id', 'firstName', 'lastName']
+        },
+        {
+          model: InvoiceItem,
+          as: 'items',
+          include: [
+            {
+              model: Product,
+              as: 'product',
+              attributes: ['id', 'name', 'sku', 'category']
+            }
+          ]
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    // Calcular resumen
+    const totalVentas = ventas.reduce((sum, v) => sum + parseFloat(v.total), 0);
+    const totalTransacciones = ventas.length;
+    const ticketPromedio = totalTransacciones > 0 ? totalVentas / totalTransacciones : 0;
+    const totalProductosVendidos = ventas.reduce((sum, v) => {
+      return sum + v.items.reduce((itemSum, item) => itemSum + parseInt(item.quantity), 0);
+    }, 0);
+
+    // Agrupar ventas por fecha para tendencia diaria
+    const ventasPorDia = {};
+    ventas.forEach(venta => {
+      const fecha = venta.createdAt.toISOString().split('T')[0];
+      if (!ventasPorDia[fecha]) {
+        ventasPorDia[fecha] = {
+          fecha,
+          cantidad: 0,
+          total: 0
+        };
+      }
+      ventasPorDia[fecha].cantidad++;
+      ventasPorDia[fecha].total += parseFloat(venta.total);
+    });
+
+    const tendenciaDiaria = Object.values(ventasPorDia).sort((a, b) =>
+      new Date(a.fecha) - new Date(b.fecha)
+    );
+
+    // Top productos vendidos en el período
+    const productosVendidos = {};
+    ventas.forEach(venta => {
+      venta.items.forEach(item => {
+        const prodId = item.productId;
+        if (!productosVendidos[prodId]) {
+          productosVendidos[prodId] = {
+            nombre: item.product?.name || 'N/A',
+            categoria: item.product?.category || 'N/A',
+            cantidad: 0,
+            ingresos: 0
+          };
+        }
+        productosVendidos[prodId].cantidad += parseInt(item.quantity);
+        productosVendidos[prodId].ingresos += parseFloat(item.subtotal || item.total || 0);
+      });
+    });
+
+    const topProductos = Object.values(productosVendidos)
+      .sort((a, b) => b.ingresos - a.ingresos)
+      .slice(0, 10);
+
+    // Ventas por método de pago
+    const ventasPorMetodo = {};
+    ventas.forEach(venta => {
+      const metodo = venta.paymentMethod || 'No especificado';
+      if (!ventasPorMetodo[metodo]) {
+        ventasPorMetodo[metodo] = {
+          metodo,
+          cantidad: 0,
+          total: 0
+        };
+      }
+      ventasPorMetodo[metodo].cantidad++;
+      ventasPorMetodo[metodo].total += parseFloat(venta.total);
+    });
+
+    const reportData = {
+      periodo: {
+        tipo: period || 'personalizado',
+        inicio: inicio.toISOString().split('T')[0],
+        fin: fin.toISOString().split('T')[0]
+      },
+      resumen: {
+        totalVentas: totalVentas.toFixed(2),
+        totalTransacciones,
+        ticketPromedio: ticketPromedio.toFixed(2),
+        totalProductosVendidos
+      },
+      ventas: ventas.map(v => ({
+        id: v.id,
+        numero: v.invoiceNumber,
+        fecha: v.createdAt,
+        cliente: v.client ? {
+          nombre: `${v.client.firstName} ${v.client.lastName}`,
+          nit: v.client.nit,
+          email: v.client.email
+        } : { nombre: 'Cliente General', nit: 'CF', email: 'N/A' },
+        vendedor: v.seller ? `${v.seller.firstName} ${v.seller.lastName}` : 'N/A',
+        metodoPago: v.paymentMethod || 'N/A',
+        subtotal: parseFloat(v.subtotal || 0).toFixed(2),
+        descuento: parseFloat(v.discount || 0).toFixed(2),
+        total: parseFloat(v.total).toFixed(2),
+        items: v.items.map(item => ({
+          producto: item.product?.name || 'N/A',
+          sku: item.product?.sku || 'N/A',
+          categoria: item.product?.category || 'N/A',
+          cantidad: item.quantity,
+          precioUnitario: parseFloat(item.unitPrice).toFixed(2),
+          subtotal: parseFloat(item.subtotal || item.total || 0).toFixed(2)
+        }))
+      })),
+      tendenciaDiaria,
+      topProductos,
+      ventasPorMetodo: Object.values(ventasPorMetodo)
+    };
+
+    const periodLabel = getPeriodLabel(period, inicio, fin);
+
+    // Generar archivo según formato
+    if (format === 'excel') {
+      const { generateSalesCompleteExcel } = require('../utils/reportGenerators');
+      const workbook = await generateSalesCompleteExcel(reportData, periodLabel);
+      const fileName = `ventas-completas-${period || 'personalizado'}-${Date.now()}.xlsx`;
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+      await workbook.xlsx.write(res);
+      res.end();
+    } else if (format === 'pdf') {
+      const { generateSalesCompletePDF } = require('../utils/reportGenerators');
+      const doc = generateSalesCompletePDF(reportData, periodLabel);
+      const fileName = `ventas-completas-${period || 'personalizado'}-${Date.now()}.pdf`;
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+      doc.pipe(res);
+      doc.end();
+    } else {
+      res.status(400).json({ message: 'Formato no válido. Use excel o pdf' });
+    }
+
+  } catch (error) {
+    console.error('Error en downloadSalesComplete:', error);
+    res.status(500).json({
+      message: 'Error al generar reporte de ventas completas',
+      error: error.message
+    });
+  }
+};
+
+/**
  * Descarga análisis de mejores días en Excel o PDF
  * GET /api/reports/download/best-sales-days?format=excel|pdf
  */
@@ -1917,6 +2300,13 @@ exports.downloadBestSalesDays = async (req, res) => {
       type: db.Sequelize.QueryTypes.SELECT
     });
 
+    // Validar que haya datos
+    if (!bestDayOfWeek || bestDayOfWeek.length === 0) {
+      return res.status(404).json({
+        message: 'No hay suficientes datos de ventas en el período seleccionado'
+      });
+    }
+
     const mejorDia = bestDayOfWeek[0];
     const peorDia = bestDayOfWeek[bestDayOfWeek.length - 1];
 
@@ -1999,8 +2389,313 @@ exports.downloadBestSalesDays = async (req, res) => {
 
   } catch (error) {
     console.error('Error en downloadBestSalesDays:', error);
+    console.error('Stack trace:', error.stack);
     res.status(500).json({
       message: 'Error al generar análisis de mejores días',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+/**
+ * Análisis completo por períodos de tiempo con datos detallados
+ * GET /api/reports/time-period-analysis
+ * Query params: startDate, endDate (opcional, por defecto últimos 90 días)
+ */
+exports.getTimePeriodAnalysis = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    // Calcular fechas - por defecto últimos 90 días
+    let inicio, fin;
+    if (startDate && endDate) {
+      inicio = new Date(startDate);
+      fin = new Date(endDate);
+    } else {
+      fin = new Date();
+      inicio = new Date();
+      inicio.setDate(inicio.getDate() - 90);
+    }
+
+    // Función auxiliar para formatear y obtener top 5 resultados de un período
+    const getTopResults = (data, limit = 5) => {
+      return data
+        .sort((a, b) => parseFloat(b.total || b.totalVentas || 0) - parseFloat(a.total || a.totalVentas || 0))
+        .slice(0, limit);
+    };
+
+    // Función auxiliar para calcular estadísticas resumidas
+    const calculateSummary = (data) => {
+      if (!data || data.length === 0) {
+        return {
+          totalVentas: 0,
+          totalTransacciones: 0,
+          ticketPromedio: 0,
+          registros: 0
+        };
+      }
+
+      const totalVentas = data.reduce((sum, item) =>
+        sum + parseFloat(item.total || item.totalVentas || 0), 0
+      );
+      const totalTransacciones = data.reduce((sum, item) =>
+        sum + parseInt(item.cantidad || item.cantidadVendida || item.numeroCompras || 0), 0
+      );
+
+      return {
+        totalVentas: totalVentas.toFixed(2),
+        totalTransacciones,
+        ticketPromedio: totalTransacciones > 0 ? (totalVentas / totalTransacciones).toFixed(2) : '0.00',
+        registros: data.length
+      };
+    };
+
+    // Objeto donde guardaremos todos los análisis
+    const analysis = {};
+
+    // 1. ANÁLISIS POR HORA
+    const ventasPorHora = await Invoice.findAll({
+      attributes: [
+        [Sequelize.fn('DATE_TRUNC', 'hour', Sequelize.col('Invoice.createdAt')), 'hora'],
+        [Sequelize.fn('COUNT', Sequelize.col('Invoice.id')), 'cantidad'],
+        [Sequelize.fn('SUM', Sequelize.col('Invoice.total')), 'total'],
+        [Sequelize.fn('AVG', Sequelize.col('Invoice.total')), 'promedio']
+      ],
+      where: {
+        createdAt: { [Op.between]: [inicio, fin] }
+      },
+      group: [Sequelize.fn('DATE_TRUNC', 'hour', Sequelize.col('Invoice.createdAt'))],
+      order: [[Sequelize.fn('DATE_TRUNC', 'hour', Sequelize.col('Invoice.createdAt')), 'DESC']],
+      raw: true
+    });
+
+    analysis.hour = {
+      summary: calculateSummary(ventasPorHora),
+      topPeriods: getTopResults(ventasPorHora).map(h => ({
+        periodo: new Date(h.hora).toLocaleString('es-GT', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          hour12: true
+        }),
+        transacciones: parseInt(h.cantidad),
+        total: parseFloat(h.total).toFixed(2),
+        ticketPromedio: parseFloat(h.promedio).toFixed(2)
+      }))
+    };
+
+    // 2. ANÁLISIS POR DÍA
+    const ventasPorDia = await Invoice.findAll({
+      attributes: [
+        [Sequelize.fn('DATE', Sequelize.col('Invoice.createdAt')), 'fecha'],
+        [Sequelize.fn('COUNT', Sequelize.col('Invoice.id')), 'cantidad'],
+        [Sequelize.fn('SUM', Sequelize.col('Invoice.total')), 'total'],
+        [Sequelize.fn('AVG', Sequelize.col('Invoice.total')), 'promedio']
+      ],
+      where: {
+        createdAt: { [Op.between]: [inicio, fin] }
+      },
+      group: [Sequelize.fn('DATE', Sequelize.col('Invoice.createdAt'))],
+      order: [[Sequelize.fn('DATE', Sequelize.col('Invoice.createdAt')), 'DESC']],
+      raw: true
+    });
+
+    analysis.day = {
+      summary: calculateSummary(ventasPorDia),
+      topPeriods: getTopResults(ventasPorDia).map(d => ({
+        periodo: new Date(d.fecha).toLocaleDateString('es-GT', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        }),
+        transacciones: parseInt(d.cantidad),
+        total: parseFloat(d.total).toFixed(2),
+        ticketPromedio: parseFloat(d.promedio).toFixed(2)
+      }))
+    };
+
+    // 3. ANÁLISIS POR SEMANA
+    const ventasPorSemana = await Invoice.findAll({
+      attributes: [
+        [Sequelize.fn('DATE_TRUNC', 'week', Sequelize.col('Invoice.createdAt')), 'semana'],
+        [Sequelize.fn('COUNT', Sequelize.col('Invoice.id')), 'cantidad'],
+        [Sequelize.fn('SUM', Sequelize.col('Invoice.total')), 'total'],
+        [Sequelize.fn('AVG', Sequelize.col('Invoice.total')), 'promedio']
+      ],
+      where: {
+        createdAt: { [Op.between]: [inicio, fin] }
+      },
+      group: [Sequelize.fn('DATE_TRUNC', 'week', Sequelize.col('Invoice.createdAt'))],
+      order: [[Sequelize.fn('DATE_TRUNC', 'week', Sequelize.col('Invoice.createdAt')), 'DESC']],
+      raw: true
+    });
+
+    analysis.week = {
+      summary: calculateSummary(ventasPorSemana),
+      topPeriods: getTopResults(ventasPorSemana).map(w => ({
+        periodo: `Semana del ${new Date(w.semana).toLocaleDateString('es-GT')}`,
+        transacciones: parseInt(w.cantidad),
+        total: parseFloat(w.total).toFixed(2),
+        ticketPromedio: parseFloat(w.promedio).toFixed(2)
+      }))
+    };
+
+    // 4. ANÁLISIS POR MES
+    const ventasPorMes = await Invoice.findAll({
+      attributes: [
+        [Sequelize.fn('DATE_TRUNC', 'month', Sequelize.col('Invoice.createdAt')), 'mes'],
+        [Sequelize.fn('COUNT', Sequelize.col('Invoice.id')), 'cantidad'],
+        [Sequelize.fn('SUM', Sequelize.col('Invoice.total')), 'total'],
+        [Sequelize.fn('AVG', Sequelize.col('Invoice.total')), 'promedio']
+      ],
+      where: {
+        createdAt: { [Op.between]: [inicio, fin] }
+      },
+      group: [Sequelize.fn('DATE_TRUNC', 'month', Sequelize.col('Invoice.createdAt'))],
+      order: [[Sequelize.fn('DATE_TRUNC', 'month', Sequelize.col('Invoice.createdAt')), 'DESC']],
+      raw: true
+    });
+
+    analysis.month = {
+      summary: calculateSummary(ventasPorMes),
+      topPeriods: getTopResults(ventasPorMes).map(m => ({
+        periodo: new Date(m.mes).toLocaleDateString('es-GT', {
+          year: 'numeric',
+          month: 'long'
+        }),
+        transacciones: parseInt(m.cantidad),
+        total: parseFloat(m.total).toFixed(2),
+        ticketPromedio: parseFloat(m.promedio).toFixed(2)
+      }))
+    };
+
+    // 5. ANÁLISIS POR TRIMESTRE
+    const ventasPorTrimestre = await Invoice.findAll({
+      attributes: [
+        [Sequelize.fn('DATE_TRUNC', 'quarter', Sequelize.col('Invoice.createdAt')), 'trimestre'],
+        [Sequelize.fn('COUNT', Sequelize.col('Invoice.id')), 'cantidad'],
+        [Sequelize.fn('SUM', Sequelize.col('Invoice.total')), 'total'],
+        [Sequelize.fn('AVG', Sequelize.col('Invoice.total')), 'promedio']
+      ],
+      where: {
+        createdAt: { [Op.between]: [inicio, fin] }
+      },
+      group: [Sequelize.fn('DATE_TRUNC', 'quarter', Sequelize.col('Invoice.createdAt'))],
+      order: [[Sequelize.fn('DATE_TRUNC', 'quarter', Sequelize.col('Invoice.createdAt')), 'DESC']],
+      raw: true
+    });
+
+    analysis.quarter = {
+      summary: calculateSummary(ventasPorTrimestre),
+      topPeriods: getTopResults(ventasPorTrimestre).map(q => {
+        const fecha = new Date(q.trimestre);
+        const trimestre = Math.floor(fecha.getMonth() / 3) + 1;
+        return {
+          periodo: `Q${trimestre} ${fecha.getFullYear()}`,
+          transacciones: parseInt(q.cantidad),
+          total: parseFloat(q.total).toFixed(2),
+          ticketPromedio: parseFloat(q.promedio).toFixed(2)
+        };
+      })
+    };
+
+    // 6. ANÁLISIS POR SEMESTRE
+    const ventasPorSemestre = await db.sequelize.query(`
+      SELECT
+        DATE_TRUNC('year', "createdAt") +
+          INTERVAL '6 months' * FLOOR(EXTRACT(MONTH FROM "createdAt") / 6) as semestre,
+        COUNT(id) as cantidad,
+        SUM(total) as total,
+        AVG(total) as promedio
+      FROM invoices
+      WHERE "createdAt" BETWEEN :startDate AND :endDate
+      GROUP BY semestre
+      ORDER BY semestre DESC
+    `, {
+      replacements: {
+        startDate: inicio,
+        endDate: fin
+      },
+      type: db.Sequelize.QueryTypes.SELECT
+    });
+
+    analysis.semester = {
+      summary: calculateSummary(ventasPorSemestre),
+      topPeriods: getTopResults(ventasPorSemestre).map(s => {
+        const fecha = new Date(s.semestre);
+        const semestre = Math.floor(fecha.getMonth() / 6) + 1;
+        return {
+          periodo: `S${semestre} ${fecha.getFullYear()}`,
+          transacciones: parseInt(s.cantidad),
+          total: parseFloat(s.total).toFixed(2),
+          ticketPromedio: parseFloat(s.promedio).toFixed(2)
+        };
+      })
+    };
+
+    // 7. ANÁLISIS POR AÑO
+    const ventasPorAño = await Invoice.findAll({
+      attributes: [
+        [Sequelize.fn('DATE_TRUNC', 'year', Sequelize.col('Invoice.createdAt')), 'año'],
+        [Sequelize.fn('COUNT', Sequelize.col('Invoice.id')), 'cantidad'],
+        [Sequelize.fn('SUM', Sequelize.col('Invoice.total')), 'total'],
+        [Sequelize.fn('AVG', Sequelize.col('Invoice.total')), 'promedio']
+      ],
+      where: {
+        createdAt: { [Op.between]: [inicio, fin] }
+      },
+      group: [Sequelize.fn('DATE_TRUNC', 'year', Sequelize.col('Invoice.createdAt'))],
+      order: [[Sequelize.fn('DATE_TRUNC', 'year', Sequelize.col('Invoice.createdAt')), 'DESC']],
+      raw: true
+    });
+
+    analysis.year = {
+      summary: calculateSummary(ventasPorAño),
+      topPeriods: getTopResults(ventasPorAño).map(y => ({
+        periodo: new Date(y.año).getFullYear().toString(),
+        transacciones: parseInt(y.cantidad),
+        total: parseFloat(y.total).toFixed(2),
+        ticketPromedio: parseFloat(y.promedio).toFixed(2)
+      }))
+    };
+
+    // Calcular totales generales del período analizado
+    const totalesGenerales = await Invoice.findAll({
+      attributes: [
+        [Sequelize.fn('COUNT', Sequelize.col('Invoice.id')), 'cantidad'],
+        [Sequelize.fn('SUM', Sequelize.col('Invoice.total')), 'total'],
+        [Sequelize.fn('AVG', Sequelize.col('Invoice.total')), 'promedio']
+      ],
+      where: {
+        createdAt: { [Op.between]: [inicio, fin] }
+      },
+      raw: true
+    });
+
+    const totales = totalesGenerales[0] || { cantidad: 0, total: 0, promedio: 0 };
+
+    res.status(200).json({
+      periodo: {
+        inicio: inicio.toISOString().split('T')[0],
+        fin: fin.toISOString().split('T')[0],
+        dias: Math.ceil((fin - inicio) / (1000 * 60 * 60 * 24))
+      },
+      resumenGeneral: {
+        totalVentas: parseFloat(totales.total || 0).toFixed(2),
+        totalTransacciones: parseInt(totales.cantidad || 0),
+        ticketPromedio: parseFloat(totales.promedio || 0).toFixed(2)
+      },
+      analisisPorPeriodo: analysis,
+      generadoEn: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Error en getTimePeriodAnalysis:', error);
+    res.status(500).json({
+      message: 'Error al obtener análisis por períodos de tiempo',
       error: error.message
     });
   }

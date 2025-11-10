@@ -58,7 +58,8 @@ temp/
 
 # === Archivos de Claude Code ===
 .claude/
-
+.Claude
+.claude
 # === Archivos de reportes generados por tests ===
 test-reporte-ventas.*
 test-analisis-economico.*
