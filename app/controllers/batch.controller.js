@@ -86,8 +86,8 @@ exports.createBatch = async (req, res) => {
             });
         }
 
-        // Validar fechas
-        if (new Date(expirationDate) <= new Date(manufacturingDate)) {
+        // Validar fechas (solo si se proporciona fecha de fabricación)
+        if (manufacturingDate && new Date(expirationDate) <= new Date(manufacturingDate)) {
             return res.status(400).json({
                 message: "La fecha de vencimiento debe ser posterior a la fecha de fabricación"
             });

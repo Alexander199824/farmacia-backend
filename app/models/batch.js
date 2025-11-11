@@ -35,8 +35,8 @@ module.exports = (sequelize, DataTypes) => {
     },
     manufacturingDate: {
       type: DataTypes.DATEONLY,
-      allowNull: false,
-      comment: 'Fecha de fabricacion'
+      allowNull: true,
+      comment: 'Fecha de fabricacion (opcional)'
     },
     expirationDate: {
       type: DataTypes.DATEONLY,

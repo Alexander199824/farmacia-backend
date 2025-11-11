@@ -43,9 +43,9 @@ exports.createSupplier = async (req, res) => {
         } = req.body;
 
         // Validar campos obligatorios
-        if (!code || !name || !email || !phone) {
+        if (!code || !name || !phone) {
             return res.status(400).json({
-                message: "Código, nombre, email y teléfono son obligatorios"
+                message: "Código, nombre y teléfono son obligatorios"
             });
         }
 
@@ -57,12 +57,14 @@ exports.createSupplier = async (req, res) => {
             });
         }
 
-        // Validar email único
-        const existingEmail = await Supplier.findOne({ where: { email } });
-        if (existingEmail) {
-            return res.status(400).json({
-                message: "El email ya está registrado para otro proveedor"
-            });
+        // Validar email único (solo si se proporciona)
+        if (email && email.trim() !== '') {
+            const existingEmail = await Supplier.findOne({ where: { email } });
+            if (existingEmail) {
+                return res.status(400).json({
+                    message: "El email ya está registrado para otro proveedor"
+                });
+            }
         }
 
         // Validar NIT único (si se proporciona)
@@ -267,8 +269,8 @@ exports.updateSupplier = async (req, res) => {
             return res.status(404).json({ message: "Proveedor no encontrado" });
         }
 
-        // Validar email único (si cambia)
-        if (email && email !== supplier.email) {
+        // Validar email único (si se proporciona y cambia)
+        if (email && email.trim() !== '' && email !== supplier.email) {
             const existingEmail = await Supplier.findOne({
                 where: {
                     email,
